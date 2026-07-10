@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Siswa, Pencatatan } from '../types';
 import { Calendar, Search, Download, Printer, ShieldAlert, FileSpreadsheet, FileText, Filter, CalendarCheck, CalendarDays, CalendarRange, Sparkles } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 
 interface LaporanSiswaProps {
   pencatatan: Pencatatan[];
@@ -98,6 +99,35 @@ export default function LaporanSiswa({ pencatatan, siswa }: LaporanSiswaProps) {
   // Extract all unique classes for filtering dropdown
   const kelasList = Array.from(new Set(siswa.map(s => s.kelas))).sort();
 
+  const getSchoolNameFromKelas = (kelasName: string): string => {
+    if (!kelasName) return 'SMP NUSANTARA PLUS';
+    const k = kelasName.toUpperCase().trim();
+    
+    if (k.includes('SMP') || /^(7|8|9|VII|VIII|IX)\b/.test(k) || ['7-A', '7-C', '8-A', '8-B', '9-A', '9-B'].includes(k)) {
+      return 'SMP NUSANTARA PLUS';
+    }
+    if (k.includes('SMA') || k.includes('IPA') || k.includes('IPS') || k.includes('MIPA') || (/^(10|11|12|X|XI|XII)\b/.test(k) && !k.includes('SMK') && !k.includes('KESEHATAN'))) {
+      return 'SMA NUSANTARA PLUS';
+    }
+    if (k.includes('SMK 2') || k.includes('KESEHATAN') || k.includes('FARMASI') || k.includes('KEPERAWATAN') || k.includes('FAR') || k.includes('PERAWAT') || k.includes('KEP')) {
+      return 'SMK 2 KESEHATAN';
+    }
+    if (k.includes('SMK') || k.includes('TKJ') || k.includes('RPL') || k.includes('MM') || k.includes('OTKP') || k.includes('AKL') || k.includes('BDP')) {
+      return 'SMK NUSANTARA 1';
+    }
+    return 'SMP NUSANTARA PLUS';
+  };
+
+  const getActiveSchoolName = (): string => {
+    if (selectedKelas && selectedKelas !== 'Semua') {
+      return getSchoolNameFromKelas(selectedKelas);
+    }
+    if (filteredRecords.length > 0) {
+      return getSchoolNameFromKelas(filteredRecords[0].kelas);
+    }
+    return 'SMP NUSANTARA PLUS';
+  };
+
   // 2. Core Filter Logic (Timezone-Safe)
   const filteredRecords = pencatatan.filter(record => {
     // A. Filter by Class
@@ -191,27 +221,283 @@ export default function LaporanSiswa({ pencatatan, siswa }: LaporanSiswaProps) {
   };
 
   // 4. CETAK / EXPORT TO PDF
-  const triggerPrint = () => {
-    window.print();
+  const triggerPrint = (customRecords?: any, customLabel?: string, customFilterType?: string) => {
+    try {
+      const recordsToPrint = Array.isArray(customRecords) ? customRecords : filteredRecords;
+      const activeFilterType = typeof customFilterType === 'string' ? customFilterType : filterType;
+      const activeLabel = typeof customLabel === 'string' ? customLabel : `${filterType.toUpperCase()}_Kelas_${selectedKelas}`;
+
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const startX = 15;
+      let currentY = 15;
+
+      // Helper to draw Kop Surat & Title
+      const drawHeader = (pageNumber: number) => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text('YAYASAN ALDIANA NUSANTARA', 105, currentY, { align: 'center' });
+        currentY += 5;
+
+        // Active school name
+        let schoolName = 'SMP NUSANTARA PLUS';
+        if (selectedKelas && selectedKelas !== 'Semua') {
+          schoolName = getSchoolNameFromKelas(selectedKelas);
+        } else if (recordsToPrint.length > 0) {
+          schoolName = getSchoolNameFromKelas(recordsToPrint[0].kelas);
+        }
+        
+        doc.setFontSize(14);
+        doc.text(schoolName, 105, currentY, { align: 'center' });
+        currentY += 5;
+
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Jl. Tarmanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan', 105, currentY, { align: 'center' });
+        currentY += 4;
+
+        // Line dividers
+        doc.setLineWidth(0.8);
+        doc.line(15, currentY, 195, currentY);
+        doc.setLineWidth(0.2);
+        doc.line(15, currentY + 1, 195, currentY + 1);
+        currentY += 8;
+
+        // Title
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text('LAPORAN REKAPITULASI PELANGGARAN TATA TERTIB SISWA', 105, currentY, { align: 'center' });
+        currentY += 5;
+
+        doc.setFontSize(8.5);
+        doc.setFont('helvetica', 'normal');
+        const periodLabel = activeFilterType === 'semua' ? 'SEMUA PERIODE' :
+                            activeFilterType === 'harian' ? `HARIAN (${formatRawDateID(selectedDate)})` :
+                            activeFilterType === 'mingguan' ? `MINGGUAN (Hingga ${formatRawDateID(selectedDate)})` :
+                            activeFilterType === 'bulanan' ? `BULANAN (${formatMonthID(selectedMonth)})` :
+                            `TAHUNAN (${selectedYear})`;
+        doc.text(`Periode Laporan: ${periodLabel}   |   Saring Kelas: ${selectedKelas}`, 105, currentY, { align: 'center' });
+        currentY += 8;
+      };
+
+      drawHeader(1);
+
+      // Table Header Row
+      const colWidths = [8, 18, 14, 26, 12, 45, 10, 22, 25];
+      const colX = [
+        startX, // 15
+        startX + 8, // 23
+        startX + 8 + 18, // 41
+        startX + 8 + 18 + 14, // 55
+        startX + 8 + 18 + 14 + 26, // 81
+        startX + 8 + 18 + 14 + 26 + 12, // 93
+        startX + 8 + 18 + 14 + 26 + 12 + 45, // 138
+        startX + 8 + 18 + 14 + 26 + 12 + 45 + 10, // 148
+        startX + 8 + 18 + 14 + 26 + 12 + 45 + 10 + 22, // 170
+      ];
+      const headers = ['No', 'Tanggal', 'NIS', 'Nama Siswa', 'Kelas', 'Kasus Pelanggaran', 'Poin', 'Petugas', 'Keterangan'];
+
+      const drawTableHeader = (y: number) => {
+        doc.setFillColor(241, 245, 249); // slate-100 bg
+        doc.rect(startX, y, 180, 8, 'F');
+        doc.setDrawColor(71, 85, 105); // slate-600
+        doc.rect(startX, y, 180, 8, 'S');
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(30, 41, 59); // slate-800
+
+        headers.forEach((h, i) => {
+          let align = 'left';
+          let xOffset = 1.5;
+          if (i === 0 || i === 4 || i === 6) {
+            align = 'center';
+            xOffset = colWidths[i] / 2;
+          }
+          doc.text(h, colX[i] + xOffset, y + 5.5, { align: align as any });
+        });
+
+        // Draw individual vertical lines for headers
+        let tempX = startX;
+        for (let i = 1; i < colWidths.length; i++) {
+          tempX += colWidths[i - 1];
+          doc.line(tempX, y, tempX, y + 8);
+        }
+      };
+
+      drawTableHeader(currentY);
+      currentY += 8;
+
+      // Draw rows
+      if (recordsToPrint.length === 0) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(9);
+        doc.text('Tidak ada data kasus pelanggaran pada filter terpilih.', 105, currentY + 8, { align: 'center' });
+        currentY += 15;
+      } else {
+        recordsToPrint.forEach((r, idx) => {
+          // Prepare multi-line text wrapping for wrapping columns
+          const splitNama = doc.splitTextToSize(r.namaSiswa, colWidths[3] - 2);
+          const splitPelanggaran = doc.splitTextToSize(r.pelanggaran, colWidths[5] - 2);
+          const splitPetugas = doc.splitTextToSize(r.petugas, colWidths[7] - 2);
+          const splitKeterangan = doc.splitTextToSize(r.keterangan || '-', colWidths[8] - 2);
+
+          const maxLines = Math.max(
+            splitNama.length,
+            splitPelanggaran.length,
+            splitPetugas.length,
+            splitKeterangan.length,
+            1
+          );
+
+          const rowHeight = Math.max(maxLines * 4.5, 7);
+
+          // Check for page overflow
+          if (currentY + rowHeight > 240) {
+            doc.addPage();
+            currentY = 15;
+            drawHeader(doc.getNumberOfPages());
+            drawTableHeader(currentY);
+            currentY += 8;
+          }
+
+          // Draw borders for this row cell by cell or outer rect
+          doc.setDrawColor(203, 213, 225); // slate-300 light border
+          doc.rect(startX, currentY, 180, rowHeight, 'S');
+
+          // Draw vertical divider lines inside row
+          let tempX = startX;
+          for (let i = 1; i < colWidths.length; i++) {
+            tempX += colWidths[i - 1];
+            doc.line(tempX, currentY, tempX, currentY + rowHeight);
+          }
+
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(15, 23, 42); // slate-900
+
+          // No
+          doc.text(String(idx + 1), colX[0] + colWidths[0]/2, currentY + 4.5, { align: 'center' });
+          // Tanggal
+          doc.text(r.tanggal, colX[1] + 1.5, currentY + 4.5);
+          // NIS
+          doc.text(String(r.nis), colX[2] + 1.5, currentY + 4.5);
+          
+          // Nama Siswa (wrapped)
+          splitNama.forEach((line: string, lineIdx: number) => {
+            doc.text(line, colX[3] + 1.5, currentY + 4.5 + (lineIdx * 4.5));
+          });
+
+          // Kelas
+          doc.text(r.kelas, colX[4] + colWidths[4]/2, currentY + 4.5, { align: 'center' });
+
+          // Pelanggaran (wrapped)
+          splitPelanggaran.forEach((line: string, lineIdx: number) => {
+            doc.text(line, colX[5] + 1.5, currentY + 4.5 + (lineIdx * 4.5));
+          });
+
+          // Poin
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(239, 68, 68); // red-500
+          doc.text(`+${r.poin}`, colX[6] + colWidths[6]/2, currentY + 4.5, { align: 'center' });
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(15, 23, 42); // slate-900
+
+          // Petugas (wrapped)
+          splitPetugas.forEach((line: string, lineIdx: number) => {
+            doc.text(line, colX[7] + 1.5, currentY + 4.5 + (lineIdx * 4.5));
+          });
+
+          // Keterangan (wrapped)
+          splitKeterangan.forEach((line: string, lineIdx: number) => {
+            doc.text(line, colX[8] + 1.5, currentY + 4.5 + (lineIdx * 4.5));
+          });
+
+          currentY += rowHeight;
+        });
+      }
+
+      // Check if signature section fits on current page, else add new page
+      if (currentY + 40 > 280) {
+        doc.addPage();
+        currentY = 20;
+      } else {
+        currentY += 12;
+      }
+
+      // Draw horizontal signature layouts
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(15, 23, 42);
+
+      // Left Column: Kepala Sekolah
+      doc.setFontSize(9);
+      doc.setTextColor(15, 23, 42);
+      doc.text('Mengetahui,', startX + 5, currentY);
+      doc.text('Kepala Sekolah', startX + 5, currentY + 5.5);
+
+      doc.line(startX + 5, currentY + 23, startX + 55, currentY + 23);
+
+      // Right Column: Guru BK
+      doc.setFontSize(9);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`Tangerang Selatan, ${new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}`, startX + 115, currentY);
+      doc.text('Guru BK', startX + 115, currentY + 5.5);
+      
+      doc.line(startX + 115, currentY + 23, startX + 165, currentY + 23);
+
+      // Save PDF document
+      const docName = `Laporan_Rekap_${activeLabel}_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(docName);
+
+    } catch (err: any) {
+      alert('Gagal mencetak PDF: ' + err.message);
+    }
   };
 
   // Select a period automatically and open print window
   const selectAndPrint = (type: 'harian' | 'mingguan' | 'bulanan' | 'tahunan') => {
     setFilterType(type);
+    let targetRecords: Pencatatan[] = [];
+    let label = 'Rekap';
+
     if (type === 'harian') {
       setSelectedDate(todayDateStr);
+      targetRecords = harianRecords;
+      label = 'Harian_Hari_Ini';
     } else if (type === 'mingguan') {
       setSelectedDate(todayDateStr);
+      targetRecords = mingguanRecords;
+      label = '7_Hari_Terakhir';
     } else if (type === 'bulanan') {
       setSelectedMonth(currentMonthStr);
+      targetRecords = bulananRecords;
+      label = `Bulanan_${currentMonthStr}`;
     } else if (type === 'tahunan') {
       setSelectedYear(currentYearStr);
+      targetRecords = tahunanRecords;
+      label = `Tahunan_${currentYearStr}`;
+    }
+
+    // Apply any currently active class filter and search query to these target records!
+    if (selectedKelas !== 'Semua') {
+      targetRecords = targetRecords.filter(r => r.kelas === selectedKelas);
+    }
+    if (searchQuery.trim() !== '') {
+      const q = searchQuery.toLowerCase();
+      targetRecords = targetRecords.filter(r => 
+        r.namaSiswa.toLowerCase().includes(q) || 
+        r.nis.includes(q) || 
+        r.pelanggaran.toLowerCase().includes(q)
+      );
     }
     
-    // Tiny delay to ensure React state commits and updates the tables before showing printing prompt
-    setTimeout(() => {
-      window.print();
-    }, 180);
+    // Generate PDF directly and instantly!
+    triggerPrint(targetRecords, label, type);
   };
 
   // Format dynamic dates beautifully
@@ -559,10 +845,10 @@ export default function LaporanSiswa({ pencatatan, siswa }: LaporanSiswaProps) {
         
         {/* Printable Institution Header (Hidden in standard screen, visible ONLY when printing PDF) */}
         <div className="hidden print-only text-center border-b-4 border-double border-slate-900 pb-4 mb-6">
-          <h1 className="text-lg font-black uppercase tracking-wider text-slate-950 font-display">PEMERINTAH KOTA TANGERANG SELATAN</h1>
-          <h2 className="text-2xl font-black text-slate-900 font-display">UPTD SMP NEGERI 17 KOTA TANGERANG SELATAN</h2>
+          <h1 className="text-lg font-black uppercase tracking-wider text-slate-950 font-display">YAYASAN ALDIANA NUSANTARA</h1>
+          <h2 className="text-2xl font-black text-slate-900 font-display">{getActiveSchoolName()}</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Komplek Pamulang Permai Barat 1 Rt 03/10 Pamulang - kota Tangerang Selatan 15417
+            Jl. Tarmanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan
           </p>
           <div className="text-center font-bold text-slate-900 uppercase underline text-sm mt-5 tracking-tight font-display">
             LAPORAN REKAPITULASI PELANGGARAN TATA TERTIB SISWA
@@ -643,17 +929,15 @@ export default function LaporanSiswa({ pencatatan, siswa }: LaporanSiswaProps) {
         <div className="hidden print-only pt-10 grid grid-cols-2 gap-12 text-center text-xs">
           <div className="space-y-16">
             <span className="block font-medium">Mengetahui,<br />Kepala Sekolah</span>
-            <div className="space-y-1">
-              <span className="block font-bold underline">Iien Puspitasari, S.Pd</span>
-              <span className="block text-[10px] text-slate-500 font-mono">NIP. 197412102003121001</span>
+            <div className="space-y-1 flex flex-col items-center">
+              <span className="inline-block w-48 border-b border-slate-900 h-5 mb-1"></span>
             </div>
           </div>
 
           <div className="space-y-16">
-            <span className="block font-medium">Tangerang Selatan, {new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}<br />Koordinator BK / Kesiswaan</span>
-            <div className="space-y-1">
-              <span className="block font-bold underline">Sulaiman, S.Psi.</span>
-              <span className="block text-[10px] text-slate-500 font-mono">NIP. 198209202022211009</span>
+            <span className="block font-medium">Tangerang Selatan, {new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}<br />Guru BK</span>
+            <div className="space-y-1 flex flex-col items-center">
+              <span className="inline-block w-48 border-b border-slate-900 h-5 mb-1"></span>
             </div>
           </div>
         </div>

@@ -533,7 +533,7 @@ export default function RuangKelas({
     
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.text('Alamat : Jl. Tarumanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan - Banten.', 105, currentY, { align: 'center' });
+    doc.text('Alamat : Jl. Tarmanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan', 105, currentY, { align: 'center' });
     currentY += 3.5;
 
     // Line dividers
@@ -702,13 +702,14 @@ export default function RuangKelas({
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
 
-    doc.text('Orang Tua / Wali Siswa,', startX + 5, signBlockY);
+    doc.text('Guru BK,', startX + 5, signBlockY);
     doc.line(startX + 5, signBlockY + 18, startX + 50, signBlockY + 18);
     doc.text('( ____________________ )', startX + 5, signBlockY + 22);
 
-    doc.text('Guru BK / Petugas Kesiswaan,', startX + 115, signBlockY);
+    doc.text('Mengetahui,', startX + 115, signBlockY);
+    doc.text('Kepala Sekolah,', startX + 115, signBlockY + 4);
     doc.line(startX + 115, signBlockY + 18, startX + 160, signBlockY + 18);
-    doc.text(`( ${isIndividual && specificRecord ? specificRecord.petugas : 'Sulaiman, S.Psi.'} )`, startX + 115, signBlockY + 22);
+    doc.text('( ____________________ )', startX + 115, signBlockY + 22);
 
     const fName = isIndividual && specificRecord
       ? `Surat_Pelanggaran_${student.nis}_${specificRecord.tanggal}.pdf`

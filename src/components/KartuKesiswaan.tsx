@@ -12,6 +12,27 @@ export default function KartuKesiswaan({ siswa, pencatatan, onClose }: KartuKesi
   const cardRef = useRef<HTMLDivElement>(null);
   const violationRef = useRef<HTMLDivElement>(null);
 
+  const getSchoolNameFromKelas = (kelasName: string): string => {
+    if (!kelasName) return 'SMP NUSANTARA PLUS';
+    const k = kelasName.toUpperCase().trim();
+    
+    if (k.includes('SMP') || /^(7|8|9|VII|VIII|IX)\b/.test(k)) {
+      return 'SMP NUSANTARA PLUS';
+    }
+    if (k.includes('SMA') || k.includes('IPA') || k.includes('IPS') || k.includes('MIPA') || (/^(10|11|12|X|XI|XII)\b/.test(k) && !k.includes('SMK') && !k.includes('KESEHATAN'))) {
+      return 'SMA NUSANTARA PLUS';
+    }
+    if (k.includes('SMK 2') || k.includes('KESEHATAN') || k.includes('FARMASI') || k.includes('KEPERAWATAN') || k.includes('FAR') || k.includes('PERAWAT') || k.includes('KEP')) {
+      return 'SMK 2 KESEHATAN';
+    }
+    if (k.includes('SMK') || k.includes('TKJ') || k.includes('RPL') || k.includes('MM') || k.includes('OTKP') || k.includes('AKL') || k.includes('BDP')) {
+      return 'SMK NUSANTARA 1';
+    }
+    return 'SMP NUSANTARA PLUS';
+  };
+
+  const activeSchoolName = getSchoolNameFromKelas(siswa.kelas);
+
   // 1. Calculate points for this student
   const studentRecords = pencatatan.filter(r => r.nis === siswa.nis);
   const totalPoints = studentRecords.reduce((sum, r) => sum + r.poin, 0);
@@ -106,8 +127,8 @@ export default function KartuKesiswaan({ siswa, pencatatan, onClose }: KartuKesi
     // Header text
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'left';
-    ctx.font = 'bold 24px sans-serif';
-    ctx.fillText('UPTD SMP NEGERI 17 KOTA TANGERANG SELATAN', 115, 65);
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(activeSchoolName, 115, 65);
     ctx.fillStyle = '#94a3b8'; // slate-400
     ctx.font = 'bold 16px sans-serif';
     ctx.fillText('KARTU DIGITAL KESISWAAN', 115, 90);
@@ -188,10 +209,10 @@ export default function KartuKesiswaan({ siswa, pencatatan, onClose }: KartuKesi
     // Signature Area
     ctx.fillStyle = '#64748b';
     ctx.font = 'normal 13px sans-serif';
-    ctx.fillText('Koordinator BK & Kesiswaan', 740, 485);
+    ctx.fillText('Guru BK', 740, 485);
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 15px sans-serif';
-    ctx.fillText('Sulaiman, S.Psi.', 740, 545);
+    ctx.fillText('( ____________________ )', 740, 545);
     ctx.fillStyle = '#475569';
     ctx.font = 'normal 11px sans-serif';
     ctx.fillText('NIP. 198209202022211009', 740, 565);
@@ -247,11 +268,11 @@ export default function KartuKesiswaan({ siswa, pencatatan, onClose }: KartuKesi
     ctx.fillStyle = '#1e293b';
     ctx.textAlign = 'center';
     ctx.font = 'extrabold 24px sans-serif';
-    ctx.fillText('PEMERINTAH KOTA TANGERANG SELATAN', canvas.width / 2, 70);
+    ctx.fillText('YAYASAN ALDIANA NUSANTARA', canvas.width / 2, 70);
     ctx.font = 'bold 20px sans-serif';
-    ctx.fillText('UPTD SMP NEGERI 17 KOTA TANGERANG SELATAN', canvas.width / 2, 100);
+    ctx.fillText(activeSchoolName, canvas.width / 2, 100);
     ctx.font = 'normal 12px sans-serif';
-    ctx.fillText('Komplek Pamulang Permai Barat 1 Rt 03/10 Pamulang - kota Tangerang Selatan 15417', canvas.width / 2, 125);
+    ctx.fillText('Jl. Tarmanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan', canvas.width / 2, 125);
 
     // Thick Double Header Lines
     ctx.strokeStyle = '#000000';
@@ -400,7 +421,7 @@ export default function KartuKesiswaan({ siswa, pencatatan, onClose }: KartuKesi
     // Signatures
     ctx.font = 'normal 13px sans-serif';
     ctx.fillText(`Tangerang Selatan, ${new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}`, 530, 885);
-    ctx.fillText('Koordinator BK / Kesiswaan,', 530, 905);
+    ctx.fillText('Guru BK,', 530, 905);
 
     // Signature Line
     ctx.strokeStyle = '#475569';
@@ -412,7 +433,7 @@ export default function KartuKesiswaan({ siswa, pencatatan, onClose }: KartuKesi
 
     ctx.fillStyle = '#0f172a';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillText('Sulaiman, S.Psi.', 530, 990);
+    ctx.fillText('( ____________________ )', 530, 990);
     ctx.fillStyle = '#64748b';
     ctx.font = 'normal 11px sans-serif';
     ctx.fillText('NIP. 198209202022211009', 530, 1007);
@@ -524,7 +545,7 @@ export default function KartuKesiswaan({ siswa, pencatatan, onClose }: KartuKesi
                 S
               </div>
               <div>
-                <h4 className="text-[11px] font-black tracking-tight uppercase leading-none">UPTD SMP NEGERI 17 KOTA TANGERANG SELATAN</h4>
+                <h4 className="text-[11px] font-black tracking-tight uppercase leading-none">{activeSchoolName}</h4>
                 <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block mt-0.5">KARTU DIGITAL KESISWAAN</span>
               </div>
             </div>
@@ -599,8 +620,8 @@ export default function KartuKesiswaan({ siswa, pencatatan, onClose }: KartuKesi
 
               {/* BK signature */}
               <div className="text-right">
-                <span className="text-slate-500 block">Guru BK & Kesiswaan</span>
-                <span className="font-black text-slate-100 block mt-0.5">Sulaiman, S.Psi.</span>
+                <span className="text-slate-500 block">Guru BK</span>
+                <span className="font-black text-slate-100 block mt-0.5">( ____________________ )</span>
               </div>
             </div>
           </div>
@@ -619,7 +640,7 @@ export default function KartuKesiswaan({ siswa, pencatatan, onClose }: KartuKesi
           >
             {/* Header Stamp */}
             <div className="border-b border-double border-slate-300 pb-2 text-center">
-              <h4 className="text-[10px] font-black text-slate-900 tracking-tight leading-none">UPTD SMP NEGERI 17 KOTA TANGERANG SELATAN</h4>
+              <h4 className="text-[10px] font-black text-slate-900 tracking-tight leading-none">{activeSchoolName}</h4>
               <span className="text-[7px] text-slate-500 block mt-1 font-semibold">KARTU PEMANTAUAN AKUMULASI POIN PELANGGARAN</span>
             </div>
 
@@ -668,11 +689,11 @@ export default function KartuKesiswaan({ siswa, pencatatan, onClose }: KartuKesi
                 <div className="w-5 h-5 rounded bg-slate-100 text-slate-500 font-mono font-bold flex items-center justify-center">
                   BK
                 </div>
-                <span>UPTD SMPN 17 Kota Tangerang Selatan</span>
+                <span>{activeSchoolName}</span>
               </div>
               <div className="text-right">
-                <span>Koordinator BK</span>
-                <span className="font-black text-slate-800 block mt-0.5">Sulaiman, S.Psi.</span>
+                <span>Guru BK</span>
+                <span className="font-black text-slate-800 block mt-0.5">( ____________________ )</span>
               </div>
             </div>
 

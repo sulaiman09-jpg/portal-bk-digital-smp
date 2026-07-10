@@ -389,7 +389,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
         <div class="kop-title">YAYASAN ALDIANA NUSANTARA</div>
         <div class="kop-title" style="font-size: 16pt;">${classNameFilter}</div>
         <div class="kop-sub" style="font-weight: bold;">Sistem Integrasi Kesiswaan - Bimbingan dan Konseling</div>
-        <div class="kop-sub" style="font-size: 9pt;">Alamat : Jl. Tarumanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan - Banten.</div>
+        <div class="kop-sub" style="font-size: 9pt;">Alamat : Jl. Tarmanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan</div>
       </div>
 
       <div class="doc-title">SURAT RINGKASAN LAPORAN KUNJUNGAN RUMAH (HOME VISIT)</div>
@@ -583,7 +583,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     doc.text('Sistem Integrasi Kesiswaan - Bimbingan dan Konseling', 105, currentY, { align: 'center' });
     currentY += 4.5;
     doc.setFontSize(7.5);
-    doc.text('Alamat : Jl. Tarumanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan - Banten.', 105, currentY, { align: 'center' });
+    doc.text('Alamat : Jl. Tarmanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan', 105, currentY, { align: 'center' });
     currentY += 3;
     doc.line(15, currentY, 195, currentY);
     currentY += 8;
@@ -769,7 +769,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
         <div class="kop-title" style="font-size: 14pt;">YAYASAN ALDIANA NUSANTARA</div>
         <div class="kop-title" style="font-size: 16pt; margin-top: 2px;">${classNameFilter}</div>
         <div class="kop-sub" style="font-weight: bold; font-size: 10pt; margin-top: 4px;">Sistem Integrasi Kesiswaan - Bimbingan dan Konseling</div>
-        <div class="kop-sub" style="font-size: 9pt; margin-top: 2px;">Alamat : Jl. Tarumanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan - Banten.</div>
+        <div class="kop-sub" style="font-size: 9pt; margin-top: 2px;">Alamat : Jl. Tarmanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan</div>
       </div>
 
       <table class="meta-table" style="margin-top: 10px; width: 100%;">
@@ -1875,7 +1875,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                       <h2 className="text-base font-black font-sans uppercase tracking-tight text-slate-900 mt-1">{classNameFilter}</h2>
                       <p className="text-[9.5px] font-sans font-semibold text-slate-800 mt-1 leading-normal">
                         Sistem Integrasi Kesiswaan - Bimbingan dan Konseling<br/>
-                        Alamat : Jl. Tarumanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan - Banten.
+                        Alamat : Jl. Tarmanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan
                       </p>
                     </div>
 
