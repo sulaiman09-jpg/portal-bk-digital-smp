@@ -37,6 +37,7 @@ export default function InputPelanggaranForm({
   const [isLoading, setIsLoading] = useState(false);
   const [formSuccess, setFormSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [photoError, setPhotoError] = useState('');
 
   // Pre-fill officer name when current user changes
   useEffect(() => {
@@ -88,8 +89,15 @@ export default function InputPelanggaranForm({
 
   // Image compression and base64 helper
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPhotoError('');
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > 50 * 1024) {
+      setPhotoError(`Ukuran file (${(file.size / 1024).toFixed(1)} KB) melebihi batas. Ukuran foto harus di bawah 50 KB!`);
+      e.target.value = '';
+      return;
+    }
     
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -347,7 +355,10 @@ export default function InputPelanggaranForm({
                       Klik untuk memilih atau seret gambar ke sini
                     </p>
                     <p className="text-[10px] text-slate-400">
-                      Format PNG, JPG, atau JPEG (Otomatis dikompres)
+                      Format PNG, JPG, atau JPEG (Maks 50 KB)
+                    </p>
+                    <p className="text-[10px] font-bold text-amber-600 mt-0.5">
+                      Catatan: Ukuran foto harus di bawah 50 KB
                     </p>
                   </div>
                 </div>
@@ -368,6 +379,11 @@ export default function InputPelanggaranForm({
                 </div>
               )}
             </div>
+            {photoError && (
+              <p className="text-xs font-semibold text-rose-600 mt-1">
+                ⚠️ {photoError}
+              </p>
+            )}
           </div>
 
           {/* SUBMIT BUTTON */}

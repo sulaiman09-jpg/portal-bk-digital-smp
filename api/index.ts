@@ -157,7 +157,7 @@ const preDefinedUsers: PreDefinedUser[] = [
   { username: 'gurubk', password: 'bk123', nama: 'Sulaiman, S.Psi.', role: 'Guru BK' },
   { username: 'iien', password: 'iien123', nama: 'Iien Puspitassari, S.Pd', role: 'Guru BK' },
   { username: 'dedah', password: 'dedah123', nama: 'Dedah Jubaedah, S.Pd.,MM', role: 'Guru BK' },
-  { username: 'shifa', password: 'shifa123', nama: 'Shifa, S.Psi', role: 'Guru BK' },
+  { username: 'Syifa MHJ, S.Psi', password: 'syifa123', nama: 'Syifa MHJ, S.Psi', role: 'Guru BK' },
   { username: 'bukhari', password: 'erik123', nama: 'Bukhari, S.Pd', role: 'Guru BK' },
   { username: 'nurma', password: 'nurma123', nama: 'Nurma, S.Pd', role: 'Guru BK' }
 ];

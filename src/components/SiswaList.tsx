@@ -112,6 +112,14 @@ export default function SiswaList({ siswa, pencatatan, userRole, onAddStudent, o
     const file = e.target.files?.[0];
     if (!file) return;
     
+    if (file.size > 50 * 1024) {
+      setErrorMsg(`Ukuran file (${(file.size / 1024).toFixed(1)} KB) melebihi batas. Ukuran foto harus di bawah 50 KB!`);
+      e.target.value = '';
+      return;
+    } else {
+      setErrorMsg('');
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -449,7 +457,10 @@ export default function SiswaList({ siswa, pencatatan, userRole, onAddStudent, o
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                       <p className="text-[11px] font-medium text-slate-600">
-                        Pilih foto profil (PNG/JPG)
+                        Pilih foto profil (PNG/JPG, Maks 50 KB)
+                      </p>
+                      <p className="text-[10px] text-amber-600 font-bold mt-0.5">
+                        Catatan: ukuran harus dibawah 50 kb
                       </p>
                     </div>
                   </div>

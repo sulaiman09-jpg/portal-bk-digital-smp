@@ -21,13 +21,13 @@ function isTabAccessible(tabId: string, user: User | null): boolean {
   if (tabId === 'kelas-smp-nusantara-plus') {
     if (nama === 'Iien Puspitassari, S.Pd') return false;
     if (nama === 'Dedah Jubaedah, S.Pd.,MM') return false;
-    if (nama === 'Shifa, S.Psi') return false;
+    if (nama === 'Syifa MHJ, S.Psi') return false;
     if (nama === 'Bukhari, S.Pd') return false;
   }
   if (tabId === 'kelas-sma-nusantara-plus') {
     if (nama === 'Iien Puspitassari, S.Pd') return false;
     if (nama === 'Dedah Jubaedah, S.Pd.,MM') return false;
-    if (nama === 'Shifa, S.Psi') return false;
+    if (nama === 'Syifa MHJ, S.Psi') return false;
     if (nama === 'Nurma, S.Pd') return false;
   }
   if (tabId === 'kelas-smk-nusantara-1') {
@@ -37,7 +37,7 @@ function isTabAccessible(tabId: string, user: User | null): boolean {
   }
   if (tabId === 'kelas-smk-2-kesehatan') {
     if (nama === 'Dedah Jubaedah, S.Pd.,MM') return false;
-    if (nama === 'Shifa, S.Psi') return false;
+    if (nama === 'Syifa MHJ, S.Psi') return false;
     if (nama === 'Bukhari, S.Pd') return false;
     if (nama === 'Nurma, S.Pd') return false;
   }
@@ -615,7 +615,7 @@ export default function App() {
                     <option value="" disabled className="text-slate-400">Guru BK ▾</option>
                     <option value="iien:iien123" className="text-slate-300 bg-slate-950 text-left font-bold text-xs">1. Iien (SMK 2)</option>
                     <option value="dedah:dedah123" className="text-slate-300 bg-slate-950 text-left font-bold text-xs">2. Dedah (SMK 1)</option>
-                    <option value="shifa:shifa123" className="text-slate-300 bg-slate-950 text-left font-bold text-xs">3. Shifa (SMK 1)</option>
+                    <option value="Syifa MHJ, S.Psi:syifa123" className="text-slate-300 bg-slate-950 text-left font-bold text-xs">3. Syifa MHJ (SMK 1)</option>
                     <option value="bukhari:erik123" className="text-slate-300 bg-slate-950 text-left font-bold text-xs">4. Bukhari (SMA)</option>
                     <option value="nurma:nurma123" className="text-slate-300 bg-slate-950 text-left font-bold text-xs">5. Nurma (SMP)</option>
                   </select>

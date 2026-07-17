@@ -196,6 +196,14 @@ export default function RuangKelas({
   const handleStudentFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > 50 * 1024) {
+      setStudentFormError(`Ukuran file (${(file.size / 1024).toFixed(1)} KB) melebihi batas. Ukuran foto harus di bawah 50 KB!`);
+      e.target.value = '';
+      return;
+    } else {
+      setStudentFormError('');
+    }
     
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -368,6 +376,14 @@ export default function RuangKelas({
   const handleRecordFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > 50 * 1024) {
+      setRecordError(`Ukuran file (${(file.size / 1024).toFixed(1)} KB) melebihi batas. Ukuran foto harus di bawah 50 KB!`);
+      e.target.value = '';
+      return;
+    } else {
+      setRecordError('');
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -1092,7 +1108,10 @@ export default function RuangKelas({
                           </button>
                         </div>
                       ) : (
-                        <span className="text-[10px] text-slate-400 italic">Format gambar jpeg/png (maks 1MB)</span>
+                        <div className="flex flex-col text-[10px]">
+                          <span className="text-slate-400 italic">Format gambar jpeg/png (Maks 50 KB)</span>
+                          <span className="text-amber-600 font-bold">Catatan: ukuran harus dibawah 50 kb</span>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1567,7 +1586,10 @@ export default function RuangKelas({
                       </button>
                     </div>
                   ) : (
-                    <span className="text-[10px] text-slate-400 italic">Pilih file foto kesiswaan</span>
+                    <div className="flex flex-col text-[10px]">
+                      <span className="text-slate-400 italic">Pilih file foto kesiswaan (Maks 50 KB)</span>
+                      <span className="text-amber-600 font-bold">Catatan: ukuran harus dibawah 50 kb</span>
+                    </div>
                   )}
                 </div>
               </div>
