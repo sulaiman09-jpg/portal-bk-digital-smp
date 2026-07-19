@@ -35,18 +35,19 @@ export const belongsToSchool = (studentKelas: string, schoolFilter: string): boo
   
   if (sf === 'SMP NUSANTARA PLUS') {
     if (k.includes('SMP')) return true;
-    const isSmpGrade = /^(7|8|9|VII|VIII|IX)\b/.test(k);
+    // Match 7, 8, 9 or VII, VIII, IX (not followed by digits to prevent matching 10, 11, 12)
+    const isSmpGrade = /^(7|8|9|VII|VIII|IX)(?![0-9])/i.test(k);
     if (isSmpGrade && !k.includes('SMA') && !k.includes('SMK')) return true;
-    // Default seed classes
     const defaultSmpClasses = ['7-A', '7-C', '8-A', '8-B', '9-A', '9-B'];
-    if (defaultSmpClasses.includes(studentKelas)) return true;
+    if (defaultSmpClasses.some(c => k.includes(c) || k.replace(/[- ]/g, '').includes(c.replace(/[- ]/g, '')))) return true;
   }
   
   if (sf === 'SMA NUSANTARA PLUS') {
     if (k.includes('SMA') || k.includes('IPA') || k.includes('IPS') || k.includes('MIPA')) {
       if (!k.includes('SMK')) return true;
     }
-    const isSmaGrade = /^(10|11|12|X|XI|XII)\b/.test(k);
+    // Match 10, 11, 12 or X, XI, XII
+    const isSmaGrade = /^(10|11|12|X|XI|XII)(?![A-Z]*\b(SMK|SMP|KESEHATAN|TKJ|RPL|FARMASI|KEPERAWATAN|FAR|PERAWAT))/i.test(k);
     if (isSmaGrade && !k.includes('SMP') && !k.includes('SMK') && !k.includes('KESEHATAN') && !k.includes('TKJ') && !k.includes('RPL') && !k.includes('FARMASI')) return true;
   }
   
@@ -326,7 +327,8 @@ export default function RuangKelas({
       const q = searchSiswaQuery.toLowerCase().trim();
       return (
         s.nama.toLowerCase().includes(q) ||
-        s.nis.includes(q)
+        s.nis.includes(q) ||
+        s.kelas.toLowerCase().includes(q)
       );
     })
     .sort((a, b) => {
@@ -345,7 +347,8 @@ export default function RuangKelas({
       const q = searchRemisiSiswaQuery.toLowerCase().trim();
       return (
         s.nama.toLowerCase().includes(q) ||
-        s.nis.includes(q)
+        s.nis.includes(q) ||
+        s.kelas.toLowerCase().includes(q)
       );
     })
     .sort((a, b) => {
@@ -516,13 +519,13 @@ export default function RuangKelas({
     });
 
     const startX = 20;
-    let currentY = 20;
+    let currentY = 15; // Raised slightly to fit on 1 page
 
     // Header KOP SURAT
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
+    doc.setFontSize(12);
     doc.text('YAYASAN ALDIANA NUSANTARA', 105, currentY, { align: 'center' });
-    currentY += 5;
+    currentY += 4.5;
     
     // Determine dynamic school name
     let schoolName = 'SMP NUSANTARA PLUS';
@@ -539,40 +542,40 @@ export default function RuangKelas({
       }
     }
     
-    doc.setFontSize(14);
+    doc.setFontSize(13);
     doc.text(schoolName, 105, currentY, { align: 'center' });
-    currentY += 5;
-    
-    doc.setFontSize(10);
-    doc.text('Sistem Integrasi Kesiswaan - Bimbingan dan Konseling', 105, currentY, { align: 'center' });
     currentY += 4.5;
     
+    doc.setFontSize(9);
+    doc.text('Sistem Integrasi Kesiswaan - Bimbingan dan Konseling', 105, currentY, { align: 'center' });
+    currentY += 4;
+    
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
+    doc.setFontSize(7.5);
     doc.text('Alamat : Jl. Tarmanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan', 105, currentY, { align: 'center' });
-    currentY += 3.5;
+    currentY += 3;
 
     // Line dividers
-    doc.setLineWidth(0.8);
+    doc.setLineWidth(0.6);
     doc.line(20, currentY, 190, currentY);
     doc.setLineWidth(0.2);
-    doc.line(20, currentY + 1, 190, currentY + 1);
-    currentY += 10;
+    doc.line(20, currentY + 0.8, 190, currentY + 0.8);
+    currentY += 7;
 
     // Title
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
+    doc.setFontSize(11);
     const titleText = isIndividual 
       ? 'SURAT KETERANGAN CATATAN PELANGGARAN SISWA (INDIVIDUAL)'
-      : 'SURAT KETERANGAN REKAPITULASI PELANGGARAN TATA TERTIB';
+      : 'SURAT KETERANGAN REKAPITULASI PELANGGARAN & REMISI POIN';
     doc.text(titleText, 105, currentY, { align: 'center' });
-    currentY += 10;
+    currentY += 8;
 
     // Student identity info
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.text('IDENTITAS SISWA:', startX, currentY);
-    currentY += 6;
+    currentY += 5;
 
     doc.setFont('helvetica', 'normal');
     const details = [
@@ -590,16 +593,16 @@ export default function RuangKelas({
       doc.text(':', startX + 50, currentY);
       doc.setFont('helvetica', 'normal');
       doc.text(item.val, startX + 53, currentY);
-      currentY += 5.5;
+      currentY += 4.8;
     });
 
-    currentY += 4;
+    currentY += 2;
 
     if (isIndividual && specificRecord) {
       // Individual report
       doc.setFont('helvetica', 'bold');
       doc.text('DETAIL KASUS PELANGGARAN:', startX, currentY);
-      currentY += 6;
+      currentY += 5;
 
       const incidentDetails = [
         { label: 'Tanggal Kejadian', val: specificRecord.tanggal },
@@ -618,114 +621,141 @@ export default function RuangKelas({
         if (item.label === 'Keterangan Kronologi') {
           const lines = doc.splitTextToSize(item.val, 115);
           doc.text(lines, startX + 53, currentY);
-          currentY += (lines.length * 5) + 2;
+          currentY += (lines.length * 4.2) + 1.5;
         } else {
           doc.text(item.val, startX + 53, currentY);
-          currentY += 5.5;
+          currentY += 4.8;
         }
       });
 
     } else {
-      // Entire history ledger
+      // Entire history ledger (Unified Violations & Remissions)
       doc.setFont('helvetica', 'bold');
-      doc.text('DAFTAR RIWAYAT PELANGGARAN TATA TERTIB SISWA:', startX, currentY);
-      currentY += 6;
+      doc.text('DAFTAR RIWAYAT PELANGGARAN & REMISI POIN:', startX, currentY);
+      currentY += 5;
 
       // Table Header
-      doc.setFontSize(9);
+      doc.setFontSize(8.5);
       doc.setFillColor(245, 245, 245);
-      doc.rect(startX, currentY, 170, 6.5, 'F');
-      doc.rect(startX, currentY, 170, 6.5, 'S');
+      doc.rect(startX, currentY, 170, 6, 'F');
+      doc.rect(startX, currentY, 170, 6, 'S');
       
       doc.setFont('helvetica', 'bold');
-      doc.text('Tanggal', startX + 2, currentY + 4.5);
-      doc.text('Nama Pelanggaran', startX + 25, currentY + 4.5);
-      doc.text('Poin', startX + 115, currentY + 4.5);
-      doc.text('Guru Pencatat', startX + 130, currentY + 4.5);
+      doc.text('Tanggal', startX + 2, currentY + 4.2);
+      doc.text('Deskripsi Catatan (Kasus / Remisi)', startX + 25, currentY + 4.2);
+      doc.text('Poin', startX + 115, currentY + 4.2);
+      doc.text('Guru Pencatat', startX + 130, currentY + 4.2);
 
-      currentY += 6.5;
+      currentY += 6;
       doc.setFont('helvetica', 'normal');
 
       const studentAllRecords = pencatatan.filter(r => r.nis === student.nis);
 
       if (studentAllRecords.length === 0) {
         doc.text('Siswa ini tercatat bersih dari semua jenis pelanggaran.', startX + 5, currentY + 5);
+        doc.rect(startX, currentY, 170, 6.5, 'S');
         currentY += 10;
       } else {
-        studentAllRecords.forEach(rec => {
-          if (currentY > 245) {
-            doc.addPage();
-            currentY = 20;
-          }
+        // Limit display records to fit on exactly ONE page
+        const maxDisplayRecords = 6;
+        const displayRecords = studentAllRecords.slice(0, maxDisplayRecords);
+        const isTruncated = studentAllRecords.length > maxDisplayRecords;
 
+        displayRecords.forEach(rec => {
           doc.text(rec.tanggal, startX + 2, currentY + 4);
           
           const textLines = doc.splitTextToSize(rec.pelanggaran, 85);
           doc.text(textLines, startX + 25, currentY + 4);
 
-          doc.text(`+${rec.poin}`, startX + 115, currentY + 4);
+          const ptsText = rec.poin > 0 ? `+${rec.poin}` : `${rec.poin}`;
+          doc.text(ptsText, startX + 115, currentY + 4);
           
           const truncOfficer = rec.petugas.length > 20 ? rec.petugas.substring(0, 18) + '..' : rec.petugas;
           doc.text(truncOfficer, startX + 130, currentY + 4);
 
-          const rHeight = Math.max(textLines.length * 4.5, 6.5);
+          const rHeight = Math.max(textLines.length * 4.2, 5.5);
           doc.rect(startX, currentY, 170, rHeight, 'S');
           currentY += rHeight;
         });
+
+        if (isTruncated) {
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(7.5);
+          doc.text(`* Menampilkan ${maxDisplayRecords} catatan terbaru dari total ${studentAllRecords.length} catatan.`, startX + 2, currentY + 4);
+          doc.rect(startX, currentY, 170, 5.5, 'S');
+          currentY += 5.5;
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.5);
+        }
       }
 
-      currentY += 6;
-      const totalPoinVal = studentAllRecords.reduce((s, r) => s + r.poin, 0);
+      currentY += 5;
+      
+      // Calculate automatically: point pelanggaran - point remisi
+      const violationsList = studentAllRecords.filter(r => r.poin > 0);
+      const remissionsList = studentAllRecords.filter(r => r.poin < 0);
+
+      const totalViolations = violationsList.reduce((sum, r) => sum + r.poin, 0);
+      const totalRemissions = remissionsList.reduce((sum, r) => sum + Math.abs(r.poin), 0);
+      const netPoints = Math.max(0, totalViolations - totalRemissions);
+
+      // Draw neat points summary block
+      doc.setFillColor(248, 250, 252);
+      doc.rect(startX, currentY, 170, 16, 'F');
+      doc.rect(startX, currentY, 170, 16, 'S');
       
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.text(`TOTAL POIN SANKSI SEMENTARA: ${totalPoinVal} Poin`, startX, currentY);
-      currentY += 5;
+      doc.setFontSize(8.5);
+      doc.text(`Kalkulasi Poin Kedisiplinan:`, startX + 3, currentY + 4.5);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.text(`(+) Total Poin Pelanggaran : ${totalViolations} Poin`, startX + 3, currentY + 10);
+      doc.text(`(-) Total Reduksi Remisi   : ${totalRemissions} Poin`, startX + 75, currentY + 10);
+      
+      doc.setFont('helvetica', 'bold');
+      doc.text(`(=) TOTAL POIN AKHIR DISIPLIN: ${netPoints} Poin`, startX + 3, currentY + 14.2);
+      currentY += 19;
 
       // Status rekomendasi pembinaan
       let recommendation = 'Berkelakuan Baik (Aman)';
       let actionPlan = 'Pertahankan perilaku disiplin dan patuhi peraturan sekolah.';
-      if (totalPoinVal > 100) {
+      if (netPoints > 100) {
         recommendation = 'Sidang Disiplin Dewan Sekolah';
         actionPlan = 'Rapat panel khusus dewan guru untuk menentukan status kepindahan atau drop-out.';
-      } else if (totalPoinVal > 75) {
+      } else if (netPoints > 75) {
         recommendation = 'Surat Peringatan Resmi (SP)';
         actionPlan = 'Surat Peringatan tertulis keras yang ditandatangani Kepala Sekolah dilayangkan.';
-      } else if (totalPoinVal > 50) {
+      } else if (netPoints > 50) {
         recommendation = 'Pemanggilan Orang Tua / Wali';
         actionPlan = 'Mengundang orang tua ke sekolah untuk konferensi bimbingan konseling.';
-      } else if (totalPoinVal > 25) {
+      } else if (netPoints > 25) {
         recommendation = 'Teguran Tertulis Resmi';
         actionPlan = 'Diterbitkan surat peringatan tertulis yang wajib ditandatangani siswa & BK.';
-      } else if (totalPoinVal > 0) {
+      } else if (netPoints > 0) {
         recommendation = 'Teguran Lisan Terbimbing';
         actionPlan = 'Konseling tatap muka langsung bersama guru BK atau wali kelas.';
       }
 
-      doc.text(`Rekomendasi Tindakan: ${recommendation}`, startX, currentY);
-      currentY += 5;
+      doc.setFontSize(8.5);
+      doc.text(`Rekomendasi Tindakan : ${recommendation}`, startX, currentY);
+      currentY += 4.5;
       doc.setFont('helvetica', 'italic');
-      doc.text(`Langkah Lanjutan: ${actionPlan}`, startX, currentY);
-      currentY += 15;
+      doc.text(`Langkah Lanjutan : ${actionPlan}`, startX, currentY);
+      currentY += 8;
     }
 
-    if (currentY > 230) {
-      doc.addPage();
-      currentY = 25;
-    }
-
-    const signBlockY = currentY + 8;
+    const signBlockY = currentY + 4;
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
+    doc.setFontSize(9);
 
     doc.text('Guru BK,', startX + 5, signBlockY);
-    doc.line(startX + 5, signBlockY + 18, startX + 50, signBlockY + 18);
-    doc.text('( ____________________ )', startX + 5, signBlockY + 22);
+    doc.line(startX + 5, signBlockY + 14, startX + 50, signBlockY + 14);
+    doc.text('( ____________________ )', startX + 5, signBlockY + 18);
 
     doc.text('Mengetahui,', startX + 115, signBlockY);
-    doc.text('Kepala Sekolah,', startX + 115, signBlockY + 4);
-    doc.line(startX + 115, signBlockY + 18, startX + 160, signBlockY + 18);
-    doc.text('( ____________________ )', startX + 115, signBlockY + 22);
+    doc.text('Kepala Sekolah,', startX + 115, signBlockY + 3.5);
+    doc.line(startX + 115, signBlockY + 14, startX + 160, signBlockY + 14);
+    doc.text('( ____________________ )', startX + 115, signBlockY + 18);
 
     const fName = isIndividual && specificRecord
       ? `Surat_Pelanggaran_${student.nis}_${specificRecord.tanggal}.pdf`
@@ -1014,9 +1044,9 @@ export default function RuangKelas({
                       type="button"
                       onClick={() => handleDownloadPDF(selectedStudentObj, false)}
                       className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[10px] rounded-lg cursor-pointer transition-all shadow-sm shrink-0"
-                      title="Unduh Rekap Pelanggaran PDF"
+                      title="Unduh Surat Keterangan Rekapitulasi (Pelanggaran & Remisi) PDF"
                     >
-                      <FileDown className="w-3.5 h-3.5" /> Rekap PDF
+                      <FileDown className="w-3.5 h-3.5" /> Unduh Surat Keterangan
                     </button>
                   </div>
                 )}
@@ -1227,15 +1257,22 @@ export default function RuangKelas({
 
                   return (
                     <div className="p-4 bg-emerald-50/60 border border-emerald-100 rounded-xl space-y-3 animate-in slide-in-from-top-1">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-4">
                         <div>
                           <span className="text-[10px] text-emerald-600 font-extrabold uppercase tracking-wide block">Ringkasan Otomatis Remisi Poin:</span>
                           <span className="font-extrabold text-slate-800 text-xs block">{selectedRemisiStudentObj.nama}</span>
                           <span className="text-[10px] text-slate-400 font-medium font-mono">NIS: {selectedRemisiStudentObj.nis} | Kelas: {selectedRemisiStudentObj.kelas} | Wali: {selectedRemisiStudentObj.namaOrangTua}</span>
                         </div>
-                        <div className="p-1.5 bg-emerald-100 rounded-full text-emerald-600 animate-bounce">
-                          <Sparkles className="w-4 h-4" />
-                        </div>
+                        
+                        {/* Download PDF button inside remisi tab */}
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadPDF(selectedRemisiStudentObj, false)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[10px] rounded-lg cursor-pointer transition-all shadow-sm shrink-0"
+                          title="Unduh Surat Keterangan Rekapitulasi (Pelanggaran & Remisi) PDF"
+                        >
+                          <FileDown className="w-3.5 h-3.5" /> Unduh Surat Keterangan
+                        </button>
                       </div>
 
                       <div className="grid grid-cols-3 gap-2 text-center text-xs">

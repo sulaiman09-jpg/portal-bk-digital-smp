@@ -38,6 +38,19 @@ export const googleSheetApi = {
     }
   },
 
+  // Fetch full Code.gs script contents
+  async getCodeGs(): Promise<ApiResponse<{ code: string }>> {
+    try {
+      const response = await fetch('/api/settings/code-gs', {
+        headers: getAuthHeaders()
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Fetch Code.gs error:', error);
+      return { success: false, message: 'Gagal mengambil kode Google Apps Script.' };
+    }
+  },
+
   // Save config URL
   async saveConfig(googleScriptUrl: string): Promise<ApiResponse<any>> {
     try {
@@ -173,6 +186,46 @@ export const googleSheetApi = {
     } catch (error) {
       console.error('Delete record error:', error);
       return { success: false, message: 'Gagal menghapus pencatatan pelanggaran.' };
+    }
+  },
+
+  // 6. Data Synchronization APIs
+  async syncPull(): Promise<ApiResponse<any>> {
+    try {
+      const response = await fetch('/api/data?action=syncPull', {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Sync pull error:', error);
+      return { success: false, message: 'Gagal menarik data dari Google Sheet.' };
+    }
+  },
+
+  async syncPush(): Promise<ApiResponse<any>> {
+    try {
+      const response = await fetch('/api/data?action=syncPush', {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Sync push error:', error);
+      return { success: false, message: 'Gagal mengirim data ke Google Sheet.' };
+    }
+  },
+
+  async syncMerge(): Promise<ApiResponse<any>> {
+    try {
+      const response = await fetch('/api/data?action=syncMerge', {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Sync merge error:', error);
+      return { success: false, message: 'Gagal mensinkronisasikan data dua arah.' };
     }
   }
 };

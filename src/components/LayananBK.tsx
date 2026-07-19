@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   BookOpen, 
   User, 
@@ -15,7 +15,10 @@ import {
   TrendingUp,
   Award,
   BookMarked,
-  Layers
+  Layers,
+  Search,
+  X,
+  ChevronDown
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { 
@@ -84,12 +87,151 @@ interface KehadiranData {
   mingguKe: string;
   bulan: string;
   tahun: string;
-  status: 'Hadir' | 'Sakit' | 'Izin' | 'Alfa';
+  status?: 'Hadir' | 'Sakit' | 'Izin' | 'Alfa';
+  hadir?: number;
+  sakit?: number;
+  izin?: number;
+  alfa?: number;
+  jumlah?: number;
   keterangan: string;
+}
+
+interface SearchableSiswaSelectProps {
+  students: Siswa[];
+  selectedValue: string;
+  onChange: (nis: string) => void;
+  placeholder?: string;
+}
+
+function SearchableSiswaSelect({ students, selectedValue, onChange, placeholder = "Cari siswa..." }: SearchableSiswaSelectProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selectedStudent = students.find(s => s.nis === selectedValue);
+
+  // Auto-clear search query when dropdown closes
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchQuery('');
+    }
+  }, [isOpen]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const filtered = students.filter(s => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      s.nama.toLowerCase().includes(q) ||
+      s.nis.includes(q) ||
+      s.kelas.toLowerCase().includes(q)
+    );
+  });
+
+  // Use the selected student's details as the value when closed, so it's fully visible and high contrast.
+  // When open, show the search query that the user is typing.
+  const displayValue = isOpen ? searchQuery : (selectedStudent ? `${selectedStudent.nama} (${selectedStudent.kelas})` : '');
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div className="relative flex items-center">
+        <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400 pointer-events-none z-10" />
+        <input
+          type="text"
+          placeholder={selectedStudent ? `${selectedStudent.nama} (${selectedStudent.kelas})` : placeholder}
+          value={displayValue}
+          onFocus={() => setIsOpen(true)}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            setIsOpen(true);
+            if (selectedValue) {
+              onChange('');
+            }
+          }}
+          className={`pl-9 pr-14 py-2.5 w-full bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold transition-all text-xs text-slate-800 shadow-sm ${selectedStudent ? 'border-indigo-300 bg-indigo-50/10' : ''}`}
+        />
+        <div className="absolute right-3 flex items-center gap-1 z-10">
+          {(selectedValue || searchQuery) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange('');
+                setSearchQuery('');
+                setIsOpen(false);
+              }}
+              className="text-slate-400 hover:text-slate-600 cursor-pointer p-0.5 hover:bg-slate-100 rounded-md transition-colors"
+              title="Bersihkan pilihan"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpen(!isOpen);
+            }}
+            className="text-slate-400 hover:text-slate-600 cursor-pointer p-0.5 hover:bg-slate-100 rounded-md transition-colors"
+          >
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1.5 z-40 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1 duration-150">
+          {filtered.length === 0 ? (
+            <div className="p-3 text-center text-slate-400 italic text-[11px]">Siswa tidak ditemukan.</div>
+          ) : (
+            filtered.slice(0, 50).map(s => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  onChange(s.nis);
+                  setIsOpen(false);
+                }}
+                className="w-full p-2.5 hover:bg-slate-50 cursor-pointer flex justify-between items-center text-[11px] transition-all text-left border-none focus:bg-slate-50 outline-none"
+              >
+                <div className="flex flex-col">
+                  <span className="font-bold text-slate-800 text-xs">{s.nama}</span>
+                  <span className="text-slate-500 font-semibold text-[10px] mt-0.5">NIS: {s.nis} | Kelas: {s.kelas}</span>
+                </div>
+                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-md font-bold text-[9px] uppercase font-mono tracking-wider shrink-0">Pilih</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function LayananBK({ siswa, classNameFilter, currentUser }: LayananBKProps) {
   const [activeTab, setActiveTab] = useState<'konseling' | 'asesmen' | 'kunjungan' | 'kehadiran' | 'surat'>('konseling');
+
+  // Helper to resolve attendance counts for backwards compatibility
+  const getRecordCounts = (item: KehadiranData) => {
+    const hadir = item.hadir !== undefined ? item.hadir : (item.status === 'Hadir' ? 5 : 0);
+    const sakit = item.sakit !== undefined ? item.sakit : (item.status === 'Sakit' ? 1 : 0);
+    const izin = item.izin !== undefined ? item.izin : (item.status === 'Izin' ? 1 : 0);
+    const alfa = item.alfa !== undefined ? item.alfa : (item.status === 'Alfa' ? 1 : 0);
+    const jumlah = item.jumlah !== undefined ? item.jumlah : (hadir + sakit + izin + alfa);
+    return { hadir, sakit, izin, alfa, jumlah };
+  };
 
   // Filter students to this school's students
   const belongsToSchool = (studentKelas: string, schoolFilter: string): boolean => {
@@ -101,17 +243,19 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     
     if (sf === 'SMP NUSANTARA PLUS') {
       if (k.includes('SMP')) return true;
-      const isSmpGrade = /^(7|8|9|VII|VIII|IX)\b/.test(k);
+      // Match 7, 8, 9 or VII, VIII, IX (not followed by digits to prevent matching 10, 11, 12)
+      const isSmpGrade = /^(7|8|9|VII|VIII|IX)(?![0-9])/i.test(k);
       if (isSmpGrade && !k.includes('SMA') && !k.includes('SMK')) return true;
       const defaultSmpClasses = ['7-A', '7-C', '8-A', '8-B', '9-A', '9-B'];
-      if (defaultSmpClasses.includes(studentKelas)) return true;
+      if (defaultSmpClasses.some(c => k.includes(c) || k.replace(/[- ]/g, '').includes(c.replace(/[- ]/g, '')))) return true;
     }
     
     if (sf === 'SMA NUSANTARA PLUS') {
       if (k.includes('SMA') || k.includes('IPA') || k.includes('IPS') || k.includes('MIPA')) {
         if (!k.includes('SMK')) return true;
       }
-      const isSmaGrade = /^(10|11|12|X|XI|XII)\b/.test(k);
+      // Match 10, 11, 12 or X, XI, XII
+      const isSmaGrade = /^(10|11|12|X|XI|XII)(?![A-Z]*\b(SMK|SMP|KESEHATAN|TKJ|RPL|FARMASI|KEPERAWATAN|FAR|PERAWAT))/i.test(k);
       if (isSmaGrade && !k.includes('SMP') && !k.includes('SMK') && !k.includes('KESEHATAN') && !k.includes('TKJ') && !k.includes('RPL') && !k.includes('FARMASI')) return true;
     }
     
@@ -129,13 +273,15 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     return false;
   };
 
-  const schoolStudents = siswa.filter(s => belongsToSchool(s.kelas, classNameFilter));
+  const filteredSchoolStudents = siswa.filter(s => belongsToSchool(s.kelas, classNameFilter));
+  const schoolStudents = filteredSchoolStudents.length > 0 ? filteredSchoolStudents : siswa;
 
   // --- States for each BK sub-feature ---
   const [konselingList, setKonselingList] = useState<KonselingData[]>([]);
   const [asesmenList, setAsesmenList] = useState<AsesmenData[]>([]);
   const [kunjunganList, setKunjunganList] = useState<KunjunganRumahData[]>([]);
   const [kehadiranList, setKehadiranList] = useState<KehadiranData[]>([]);
+  const [searchKehadiranQuery, setSearchKehadiranQuery] = useState('');
 
   // Toast notifier
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -162,6 +308,55 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
 
     if (storedKehadiran) setKehadiranList(JSON.parse(storedKehadiran));
     else setKehadiranList([]);
+
+    setSearchKehadiranQuery('');
+
+    // Reset forms to prevent cross-school student data bleed
+    setFormKonseling({
+      nis: '',
+      jenisKonseling: 'Individu',
+      tanggal: new Date().toISOString().split('T')[0],
+      permasalahanUtama: '',
+      analisisBK: '',
+      solusiRekomendasi: '',
+      hasilEvaluasi: '',
+      tindakLanjut: ''
+    });
+
+    setFormAsesmen({
+      nis: '',
+      hasilAKPD: '',
+      gayaBelajar: '',
+      aum: '',
+      psikotes: '',
+      minatBakat: ''
+    });
+
+    setFormKunjungan({
+      nis: '',
+      tanggalKunjungan: new Date().toISOString().split('T')[0],
+      tujuanKunjungan: '',
+      hasilTemuan: ''
+    });
+
+    setFormKehadiran({
+      nis: '',
+      mingguKe: 'Minggu 1',
+      bulan: 'Januari',
+      tahun: '2026',
+      hadir: 5,
+      sakit: 0,
+      izin: 0,
+      alfa: 0,
+      keterangan: ''
+    });
+
+    setFormSurat({
+      nis: '',
+      jenisSurat: 'Surat Panggilan',
+      nomorSurat: '023/BK-NP/VII/2026',
+      perihal: 'Pemanggilan Orang Tua / Koordinasi Perilaku'
+    });
   }, [classNameFilter]);
 
   // Save helpers
@@ -468,7 +663,10 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     mingguKe: 'Minggu 1',
     bulan: 'Januari',
     tahun: '2026',
-    status: 'Hadir' as 'Hadir' | 'Sakit' | 'Izin' | 'Alfa',
+    hadir: 5,
+    sakit: 0,
+    izin: 0,
+    alfa: 0,
     keterangan: ''
   });
 
@@ -500,6 +698,14 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
       return;
     }
 
+    const counts = {
+      hadir: formKehadiran.hadir,
+      sakit: formKehadiran.sakit,
+      izin: formKehadiran.izin,
+      alfa: formKehadiran.alfa,
+      jumlah: formKehadiran.hadir + formKehadiran.sakit + formKehadiran.izin + formKehadiran.alfa
+    };
+
     const newKehadiran: KehadiranData = {
       id: 'H-' + Date.now(),
       nis: formKehadiran.nis,
@@ -508,7 +714,12 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
       mingguKe: formKehadiran.mingguKe,
       bulan: formKehadiran.bulan,
       tahun: formKehadiran.tahun,
-      status: formKehadiran.status,
+      hadir: counts.hadir,
+      sakit: counts.sakit,
+      izin: counts.izin,
+      alfa: counts.alfa,
+      jumlah: counts.jumlah,
+      status: counts.hadir > 0 ? 'Hadir' : (counts.sakit > 0 ? 'Sakit' : (counts.izin > 0 ? 'Izin' : 'Alfa')),
       keterangan: formKehadiran.keterangan
     };
 
@@ -517,6 +728,10 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     setFormKehadiran(prev => ({
       ...prev,
       nis: '',
+      hadir: 5,
+      sakit: 0,
+      izin: 0,
+      alfa: 0,
       keterangan: ''
     }));
   };
@@ -530,7 +745,11 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
   // --- Attendance Analytics Generation ---
   // Distribution of statuses (Hadir, Sakit, Izin, Alfa)
   const statusCounts = kehadiranList.reduce((acc, curr) => {
-    acc[curr.status] = (acc[curr.status] || 0) + 1;
+    const counts = getRecordCounts(curr);
+    acc.Hadir += counts.hadir;
+    acc.Sakit += counts.sakit;
+    acc.Izin += counts.izin;
+    acc.Alfa += counts.alfa;
     return acc;
   }, { Hadir: 0, Sakit: 0, Izin: 0, Alfa: 0 } as Record<string, number>);
 
@@ -544,10 +763,14 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
   // Per Class Attendance summary
   const classStatusSummary = kehadiranList.reduce((acc, curr) => {
     const cl = curr.kelas;
+    const counts = getRecordCounts(curr);
     if (!acc[cl]) {
       acc[cl] = { kelas: cl, Hadir: 0, Sakit: 0, Izin: 0, Alfa: 0 };
     }
-    acc[cl][curr.status]++;
+    acc[cl].Hadir += counts.hadir;
+    acc[cl].Sakit += counts.sakit;
+    acc[cl].Izin += counts.izin;
+    acc[cl].Alfa += counts.alfa;
     return acc;
   }, {} as Record<string, { kelas: string; Hadir: number; Sakit: number; Izin: number; Alfa: number }>);
 
@@ -556,12 +779,17 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
   // Absensi Per-Bulan Trend
   const monthlyStatusSummary = listBulan.map(b => {
     const records = kehadiranList.filter(h => h.bulan === b);
+    const totals = records.reduce((acc, curr) => {
+      const counts = getRecordCounts(curr);
+      acc.Hadir += counts.hadir;
+      acc.Sakit += counts.sakit;
+      acc.Izin += counts.izin;
+      acc.Alfa += counts.alfa;
+      return acc;
+    }, { Hadir: 0, Sakit: 0, Izin: 0, Alfa: 0 });
     return {
       bulan: b.substring(0, 3),
-      Hadir: records.filter(r => r.status === 'Hadir').length,
-      Sakit: records.filter(r => r.status === 'Sakit').length,
-      Izin: records.filter(r => r.status === 'Izin').length,
-      Alfa: records.filter(r => r.status === 'Alfa').length,
+      ...totals
     };
   }).filter(b => b.Hadir > 0 || b.Sakit > 0 || b.Izin > 0 || b.Alfa > 0);
 
@@ -591,7 +819,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     // Document title
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text('LAPORAN DAFTAR PRESENSI & ABSENSI SISWA', 105, currentY, { align: 'center' });
+    doc.text('LAPORAN DAFTAR REKAPITULASI PRESENSI & ABSENSI SISWA', 105, currentY, { align: 'center' });
     currentY += 10;
 
     // Metadata
@@ -602,52 +830,49 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     currentY += 8;
 
     // Table Headers
-    doc.setFillColor(240, 243, 246);
-    doc.rect(15, currentY, 180, 8, 'F');
-    doc.rect(15, currentY, 180, 8, 'S');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.text('NIS', 17, currentY + 5.5);
-    doc.text('Nama Siswa', 38, currentY + 5.5);
-    doc.text('Kelas', 92, currentY + 5.5);
-    doc.text('Periode', 115, currentY + 5.5);
-    doc.text('Status', 148, currentY + 5.5);
-    doc.text('Keterangan', 165, currentY + 5.5);
+    const drawTableHeader = (y: number) => {
+      doc.setFillColor(240, 243, 246);
+      doc.rect(15, y, 180, 8, 'F');
+      doc.rect(15, y, 180, 8, 'S');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.text('NIS', 17, y + 5.5);
+      doc.text('Nama Siswa', 38, y + 5.5);
+      doc.text('Kelas', 85, y + 5.5);
+      doc.text('Periode', 105, y + 5.5);
+      doc.text('H  S  I  A  J', 140, y + 5.5);
+      doc.text('Keterangan', 165, y + 5.5);
+    };
 
+    drawTableHeader(currentY);
     currentY += 8;
     doc.setFont('helvetica', 'normal');
 
     if (kehadiranList.length === 0) {
       doc.rect(15, currentY, 180, 10, 'S');
       doc.text('Belum ada data rekapitulasi kehadiran siswa.', 105, currentY + 6.5, { align: 'center' });
+      currentY += 10;
     } else {
       kehadiranList.forEach((item, idx) => {
         if (currentY > 260) {
           doc.addPage();
           currentY = 20;
-          // redraw table header
-          doc.setFillColor(240, 243, 246);
-          doc.rect(15, currentY, 180, 8, 'F');
-          doc.rect(15, currentY, 180, 8, 'S');
-          doc.setFont('helvetica', 'bold');
-          doc.text('NIS', 17, currentY + 5.5);
-          doc.text('Nama Siswa', 38, currentY + 5.5);
-          doc.text('Kelas', 92, currentY + 5.5);
-          doc.text('Periode', 115, currentY + 5.5);
-          doc.text('Status', 148, currentY + 5.5);
-          doc.text('Keterangan', 165, currentY + 5.5);
+          drawTableHeader(currentY);
           currentY += 8;
           doc.setFont('helvetica', 'normal');
         }
 
+        const counts = getRecordCounts(item);
         doc.text(item.nis, 17, currentY + 5);
-        const truncName = item.namaSiswa.length > 25 ? item.namaSiswa.substring(0, 23) + '..' : item.namaSiswa;
+        const truncName = item.namaSiswa.length > 20 ? item.namaSiswa.substring(0, 18) + '..' : item.namaSiswa;
         doc.text(truncName, 38, currentY + 5);
-        doc.text(item.kelas, 92, currentY + 5);
+        doc.text(item.kelas, 85, currentY + 5);
         
-        const periodText = `${item.mingguKe}, ${item.bulan}`;
-        doc.text(periodText, 115, currentY + 5);
-        doc.text(item.status, 148, currentY + 5);
+        const periodText = `${item.mingguKe}, ${item.bulan.substring(0, 3)} ${item.tahun}`;
+        doc.text(periodText, 105, currentY + 5);
+        
+        const rValue = `${counts.hadir}  ${counts.sakit}  ${counts.izin}  ${counts.alfa}  ${counts.jumlah}`;
+        doc.text(rValue, 140, currentY + 5);
         
         const reasonText = item.keterangan || '-';
         const truncReason = reasonText.length > 15 ? reasonText.substring(0, 13) + '..' : reasonText;
@@ -856,6 +1081,16 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     downloadWordDoc(`Surat_Resmi_BK_${generatedLetter.nis}.doc`, letterHtmlContent);
   };
 
+  const filteredKehadiranList = kehadiranList.filter(item => {
+    if (!searchKehadiranQuery.trim()) return true;
+    const q = searchKehadiranQuery.toLowerCase().trim();
+    return (
+      item.namaSiswa.toLowerCase().includes(q) ||
+      item.nis.includes(q) ||
+      item.kelas.toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div id="layanan-bk-component" className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-6 mt-8">
       
@@ -936,19 +1171,13 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                   {/* Student dropdown */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] text-slate-400 uppercase block">Nama Siswa / Murid *</label>
-                    <select
-                      required
-                      value={formKonseling.nis}
-                      onChange={(e) => setFormKonseling(prev => ({ ...prev, nis: e.target.value }))}
-                      className="w-full px-3 py-2.5 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-xs cursor-pointer transition-all"
-                    >
-                      <option value="">-- Pilih Siswa Kelas --</option>
-                      {schoolStudents.map(s => (
-                        <option key={s.id} value={s.nis}>
-                          {s.nama} ({s.kelas}) - NIS: {s.nis}
-                        </option>
-                      ))}
-                    </select>
+                    <SearchableSiswaSelect
+                      students={schoolStudents}
+                      selectedValue={formKonseling.nis}
+                      onChange={(nis) => setFormKonseling(prev => ({ ...prev, nis }))}
+                      placeholder="Cari siswa kesiswaan..."
+                    />
+                    <input type="hidden" name="konseling_siswa_nis" value={formKonseling.nis} required />
                   </div>
 
                   {/* Jenis Konseling */}
@@ -1141,19 +1370,13 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                   {/* Student */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] text-slate-400 uppercase block">Nama Siswa *</label>
-                    <select
-                      required
-                      value={formAsesmen.nis}
-                      onChange={(e) => setFormAsesmen(prev => ({ ...prev, nis: e.target.value }))}
-                      className="w-full px-3 py-2.5 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-xs cursor-pointer transition-all"
-                    >
-                      <option value="">-- Pilih Siswa --</option>
-                      {schoolStudents.map(s => (
-                        <option key={s.id} value={s.nis}>
-                          {s.nama} ({s.kelas})
-                        </option>
-                      ))}
-                    </select>
+                    <SearchableSiswaSelect
+                      students={schoolStudents}
+                      selectedValue={formAsesmen.nis}
+                      onChange={(nis) => setFormAsesmen(prev => ({ ...prev, nis }))}
+                      placeholder="Cari siswa kesiswaan..."
+                    />
+                    <input type="hidden" name="asesmen_siswa_nis" value={formAsesmen.nis} required />
                   </div>
 
                   {/* Hasil AKPD */}
@@ -1307,19 +1530,13 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                   {/* Student */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] text-slate-400 uppercase block">Siswa Dikunjungi *</label>
-                    <select
-                      required
-                      value={formKunjungan.nis}
-                      onChange={(e) => setFormKunjungan(prev => ({ ...prev, nis: e.target.value }))}
-                      className="w-full px-3 py-2.5 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-xs cursor-pointer transition-all"
-                    >
-                      <option value="">-- Pilih Siswa --</option>
-                      {schoolStudents.map(s => (
-                        <option key={s.id} value={s.nis}>
-                          {s.nama} ({s.kelas})
-                        </option>
-                      ))}
-                    </select>
+                    <SearchableSiswaSelect
+                      students={schoolStudents}
+                      selectedValue={formKunjungan.nis}
+                      onChange={(nis) => setFormKunjungan(prev => ({ ...prev, nis }))}
+                      placeholder="Cari siswa dikunjungi..."
+                    />
+                    <input type="hidden" name="kunjungan_siswa_nis" value={formKunjungan.nis} required />
                   </div>
 
                   {/* Tanggal Kunjungan */}
@@ -1532,19 +1749,13 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                   {/* Student */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] text-slate-400 uppercase block">Nama Siswa *</label>
-                    <select
-                      required
-                      value={formKehadiran.nis}
-                      onChange={(e) => setFormKehadiran(prev => ({ ...prev, nis: e.target.value }))}
-                      className="w-full px-3 py-2.5 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-xs cursor-pointer transition-all"
-                    >
-                      <option value="">-- Pilih Siswa --</option>
-                      {schoolStudents.map(s => (
-                        <option key={s.id} value={s.nis}>
-                          {s.nama} ({s.kelas})
-                        </option>
-                      ))}
-                    </select>
+                    <SearchableSiswaSelect
+                      students={schoolStudents}
+                      selectedValue={formKehadiran.nis}
+                      onChange={(nis) => setFormKehadiran(prev => ({ ...prev, nis }))}
+                      placeholder="Cari siswa..."
+                    />
+                    <input type="hidden" name="kehadiran_siswa_nis" value={formKehadiran.nis} required />
                   </div>
 
                   {/* Periode */}
@@ -1591,33 +1802,69 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                     />
                   </div>
 
-                  {/* Status Options */}
+                  {/* Rekap Hari Kehadiran */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-slate-400 uppercase block">Status Kehadiran *</label>
+                    <label className="text-[10px] text-slate-400 uppercase block font-bold">Perekapan Hari Kehadiran (Mingguan) *</label>
                     <div className="grid grid-cols-4 gap-2">
-                      {(['Hadir', 'Sakit', 'Izin', 'Alfa'] as const).map(st => {
-                        const isChosen = formKehadiran.status === st;
-                        return (
-                          <button
-                            key={st}
-                            type="button"
-                            onClick={() => setFormKehadiran(prev => ({ ...prev, status: st }))}
-                            className={`py-2 text-center font-bold text-[11px] rounded-lg transition-all border cursor-pointer ${
-                              isChosen 
-                                ? st === 'Hadir' 
-                                  ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
-                                  : st === 'Sakit'
-                                  ? 'bg-blue-600 border-blue-600 text-white shadow-xs'
-                                  : st === 'Izin'
-                                  ? 'bg-amber-600 border-amber-600 text-white shadow-xs'
-                                  : 'bg-rose-600 border-rose-600 text-white shadow-xs'
-                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                            }`}
-                          >
-                            {st}
-                          </button>
-                        );
-                      })}
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-emerald-600 font-extrabold uppercase block text-center">Hadir (Hari)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="7"
+                          required
+                          value={formKehadiran.hadir}
+                          onChange={(e) => setFormKehadiran(prev => ({ ...prev, hadir: parseInt(e.target.value, 10) || 0 }))}
+                          className="w-full px-2 py-2 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-center text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-blue-600 font-extrabold uppercase block text-center">Sakit (Hari)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="7"
+                          required
+                          value={formKehadiran.sakit}
+                          onChange={(e) => setFormKehadiran(prev => ({ ...prev, sakit: parseInt(e.target.value, 10) || 0 }))}
+                          className="w-full px-2 py-2 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-center text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-amber-600 font-extrabold uppercase block text-center">Izin (Hari)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="7"
+                          required
+                          value={formKehadiran.izin}
+                          onChange={(e) => setFormKehadiran(prev => ({ ...prev, izin: parseInt(e.target.value, 10) || 0 }))}
+                          className="w-full px-2 py-2 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-center text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-rose-600 font-extrabold uppercase block text-center">Alfa (Hari)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="7"
+                          required
+                          value={formKehadiran.alfa}
+                          onChange={(e) => setFormKehadiran(prev => ({ ...prev, alfa: parseInt(e.target.value, 10) || 0 }))}
+                          className="w-full px-2 py-2 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-center text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rekapitulasi Jumlah Hari */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-slate-400 uppercase block font-bold">Jumlah (Hari)</label>
+                    <div className="w-full py-2.5 bg-slate-100 border border-slate-200 text-slate-700 font-black text-xs rounded-xl flex items-center justify-between px-4">
+                      <span className="uppercase text-[9px] text-slate-500 tracking-wider">Total Hari Kehadiran Terhitung:</span>
+                      <span className="font-mono text-indigo-600 text-sm font-extrabold">
+                        {formKehadiran.hadir + formKehadiran.sakit + formKehadiran.izin + formKehadiran.alfa} Hari
+                      </span>
                     </div>
                   </div>
 
@@ -1693,9 +1940,31 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
 
                 {/* Absensi Table logs */}
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100">
                     <h3 className="font-extrabold text-slate-800 text-sm">Riwayat Rekapitulasi Presensi Mingguan</h3>
-                    <span className="text-[10px] font-bold font-mono text-slate-400">Total: {kehadiranList.length} rekap</span>
+                    
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={searchKehadiranQuery}
+                          onChange={(e) => setSearchKehadiranQuery(e.target.value)}
+                          placeholder="Cari nama, NIS, atau kelas..."
+                          className="pl-8 pr-7 py-2 w-full sm:w-60 text-xs bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-semibold transition-all shadow-2xs text-slate-800"
+                        />
+                        {searchKehadiranQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setSearchKehadiranQuery('')}
+                            className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 font-extrabold text-xs cursor-pointer"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-bold font-mono text-slate-400 shrink-0">Total: {filteredKehadiranList.length} rekap</span>
+                    </div>
                   </div>
 
                   <div className="overflow-x-auto border border-slate-200 rounded-2xl">
@@ -1710,14 +1979,14 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-600 text-[11px]">
-                        {kehadiranList.length === 0 ? (
+                        {filteredKehadiranList.length === 0 ? (
                           <tr>
                             <td colSpan={5} className="py-8 text-center italic text-slate-400 font-medium">
-                              Belum ada data presensi mingguan yang terekam.
+                              {searchKehadiranQuery ? "Tidak ada rekap presensi yang cocok dengan pencarian." : "Belum ada data presensi mingguan yang terekam."}
                             </td>
                           </tr>
                         ) : (
-                          kehadiranList.map(item => (
+                          filteredKehadiranList.map(item => (
                             <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                               <td className="py-3.5 px-4 font-semibold text-slate-800">
                                 <span className="block font-bold">{item.namaSiswa}</span>
@@ -1726,24 +1995,36 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                               <td className="py-3.5 px-4 font-semibold text-slate-700 font-mono text-[10px]">
                                 {item.mingguKe} - {item.bulan} {item.tahun}
                               </td>
-                              <td className="py-3.5 px-4">
-                                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                                  item.status === 'Hadir' 
-                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                                    : item.status === 'Sakit'
-                                    ? 'bg-blue-50 text-blue-700 border border-blue-100'
-                                    : item.status === 'Izin'
-                                    ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                                    : 'bg-rose-50 text-rose-700 border border-rose-100'
-                                }`}>
-                                  {item.status}
-                                </span>
+                              <td className="py-3.5 px-4 font-bold">
+                                {(() => {
+                                  const counts = getRecordCounts(item);
+                                  return (
+                                    <div className="flex flex-wrap items-center gap-1.5 font-mono text-[10px]">
+                                      <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100 font-bold" title="Hadir">
+                                        H: {counts.hadir}
+                                      </span>
+                                      <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 font-bold" title="Sakit">
+                                        S: {counts.sakit}
+                                      </span>
+                                      <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100 font-bold" title="Izin">
+                                        I: {counts.izin}
+                                      </span>
+                                      <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-100 font-bold" title="Alfa">
+                                        A: {counts.alfa}
+                                      </span>
+                                      <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 font-black font-sans text-[9px]" title="Total">
+                                        Total: {counts.jumlah} Hari
+                                      </span>
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               <td className="py-3.5 px-4 leading-normal max-w-xs font-medium italic text-slate-500">
                                 {item.keterangan || '-'}
                               </td>
                               <td className="py-3.5 px-4 text-center">
                                 <button
+                                  type="button"
                                   onClick={() => handleDeleteKehadiran(item.id)}
                                   className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
                                 >
@@ -1781,19 +2062,13 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                   {/* Siswa */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] text-slate-400 uppercase block">Nama Siswa / Murid *</label>
-                    <select
-                      required
-                      value={formSurat.nis}
-                      onChange={(e) => setFormSurat(prev => ({ ...prev, nis: e.target.value }))}
-                      className="w-full px-3 py-2.5 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-xs cursor-pointer transition-all"
-                    >
-                      <option value="">-- Pilih Siswa --</option>
-                      {schoolStudents.map(s => (
-                        <option key={s.id} value={s.nis}>
-                          {s.nama} ({s.kelas})
-                        </option>
-                      ))}
-                    </select>
+                    <SearchableSiswaSelect
+                      students={schoolStudents}
+                      selectedValue={formSurat.nis}
+                      onChange={(nis) => setFormSurat(prev => ({ ...prev, nis }))}
+                      placeholder="Cari siswa..."
+                    />
+                    <input type="hidden" name="surat_siswa_nis" value={formSurat.nis} required />
                   </div>
 
                   {/* Jenis Surat */}

@@ -42,29 +42,39 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  var action = e.parameter.action;
   var sheet = SpreadsheetApp.getActiveSpreadsheet();
   
   initializeSheets(sheet);
   
   try {
-    var postData = JSON.parse(e.postData.contents);
+    var postData = {};
+    if (e && e.postData && e.postData.contents) {
+      postData = JSON.parse(e.postData.contents);
+    }
+    
+    // Support action either in URL parameters or in the JSON payload body (robust against redirect issues)
+    var action = (e && e.parameter && e.parameter.action) || postData.action;
     var responseData;
     
+    // Support nested data under 'data' key or top-level payload structure
+    var data = (postData.data !== undefined && postData.action !== undefined) ? postData.data : postData;
+    
     if (action === 'addStudent') {
-      responseData = addStudent(sheet, postData);
+      responseData = addStudent(sheet, data);
     } else if (action === 'deleteStudent') {
-      responseData = deleteStudent(sheet, postData);
+      responseData = deleteStudent(sheet, data);
     } else if (action === 'addViolation') {
-      responseData = addViolation(sheet, postData);
+      responseData = addViolation(sheet, data);
     } else if (action === 'deleteViolation') {
-      responseData = deleteViolation(sheet, postData);
+      responseData = deleteViolation(sheet, data);
     } else if (action === 'addRecord') {
-      responseData = addRecord(sheet, postData);
+      responseData = addRecord(sheet, data);
     } else if (action === 'deleteRecord') {
-      responseData = deleteRecord(sheet, postData);
+      responseData = deleteRecord(sheet, data);
+    } else if (action === 'overwriteAllData') {
+      responseData = overwriteAllData(sheet, data);
     } else {
-      return createJsonResponse({ success: false, message: 'Action tidak dikenali atau format POST salah' });
+      return createJsonResponse({ success: false, message: 'Action tidak dikenali atau format POST salah. Action: ' + action });
     }
     
     return createJsonResponse({ success: true, message: 'Operasi berhasil', data: responseData });
@@ -454,3 +464,69 @@ function recalculatePembinaanForStudent(ss, nis, namaSiswa, tanggalPencatatan) {
     shPembinaan.appendRow(rowData);
   }
 }
+
+// 10. OVERWRITE ALL DATA FOR BULK SYNC
+function overwriteAllData(ss, data) {
+  // Overwrite SISWA sheet
+  var shSiswa = ss.getSheetByName('SISWA');
+  if (shSiswa) {
+    shSiswa.clearContents();
+    shSiswa.appendRow(['ID', 'NIS', 'Nama', 'Kelas', 'JK', 'Nama Orang Tua', 'No HP', 'Foto']);
+    if (data.siswa && data.siswa.length > 0) {
+      for (var i = 0; i < data.siswa.length; i++) {
+        var s = data.siswa[i];
+        shSiswa.appendRow([s.id, s.nis, s.nama, s.kelas, s.jk, s.namaOrangTua, s.noHp, s.foto || '']);
+      }
+    }
+  }
+
+  // Overwrite PELANGGARAN sheet
+  var shPelanggaran = ss.getSheetByName('PELANGGARAN');
+  if (shPelanggaran) {
+    shPelanggaran.clearContents();
+    shPelanggaran.appendRow(['ID', 'Kode', 'Nama Pelanggaran', 'Kategori', 'Poin']);
+    if (data.pelanggaran && data.pelanggaran.length > 0) {
+      for (var i = 0; i < data.pelanggaran.length; i++) {
+        var v = data.pelanggaran[i];
+        shPelanggaran.appendRow([v.id, v.kode, v.namaPelanggaran, v.kategori, Number(v.poin)]);
+      }
+    }
+  }
+
+  // Overwrite PENCATATAN sheet
+  var shPencatatan = ss.getSheetByName('PENCATATAN');
+  if (shPencatatan) {
+    shPencatatan.clearContents();
+    shPencatatan.appendRow(['ID', 'Tanggal', 'NIS', 'Nama Siswa', 'Kelas', 'Pelanggaran', 'Poin', 'Petugas', 'Keterangan', 'Foto']);
+    if (data.pencatatan && data.pencatatan.length > 0) {
+      for (var i = 0; i < data.pencatatan.length; i++) {
+        var r = data.pencatatan[i];
+        var cleanDate = r.tanggal;
+        if (cleanDate && cleanDate.indexOf('T') !== -1) {
+          cleanDate = cleanDate.split('T')[0];
+        }
+        shPencatatan.appendRow([r.id, cleanDate, r.nis, r.namaSiswa, r.kelas, r.pelanggaran, r.poin, r.petugas, r.keterangan || '', r.foto || '']);
+      }
+    }
+  }
+
+  // Overwrite PEMBINAAN sheet
+  var shPembinaan = ss.getSheetByName('PEMBINAAN');
+  if (shPembinaan) {
+    shPembinaan.clearContents();
+    shPembinaan.appendRow(['ID', 'NIS', 'Nama Siswa', 'Total Poin', 'Tindakan', 'Tanggal']);
+    if (data.pembinaan && data.pembinaan.length > 0) {
+      for (var i = 0; i < data.pembinaan.length; i++) {
+        var p = data.pembinaan[i];
+        var cleanDate = p.tanggal;
+        if (cleanDate && cleanDate.indexOf('T') !== -1) {
+          cleanDate = cleanDate.split('T')[0];
+        }
+        shPembinaan.appendRow([p.id, p.nis, p.namaSiswa, p.totalPoin, p.tindakan, cleanDate]);
+      }
+    }
+  }
+
+  return { success: true, message: 'Semua data berhasil disinkronkan ke Google Sheet!' };
+}
+
