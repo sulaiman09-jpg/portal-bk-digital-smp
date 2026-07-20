@@ -18,7 +18,8 @@ import {
   Layers,
   Search,
   X,
-  ChevronDown
+  ChevronDown,
+  GraduationCap
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { 
@@ -94,6 +95,18 @@ interface KehadiranData {
   alfa?: number;
   jumlah?: number;
   keterangan: string;
+}
+
+interface SnbpData {
+  id: string;
+  nis: string;
+  namaSiswa: string;
+  kelas: string;
+  namaUniversitas: string;
+  programStudi: string;
+  keteranganLulus: 'Lulus' | 'Tidak Lulus';
+  tahun: string;
+  catatan?: string;
 }
 
 interface SearchableSiswaSelectProps {
@@ -221,7 +234,7 @@ function SearchableSiswaSelect({ students, selectedValue, onChange, placeholder 
 }
 
 export default function LayananBK({ siswa, classNameFilter, currentUser }: LayananBKProps) {
-  const [activeTab, setActiveTab] = useState<'konseling' | 'asesmen' | 'kunjungan' | 'kehadiran' | 'surat'>('konseling');
+  const [activeTab, setActiveTab] = useState<'konseling' | 'asesmen' | 'kunjungan' | 'kehadiran' | 'surat' | 'snbp'>('konseling');
 
   // Helper to resolve attendance counts for backwards compatibility
   const getRecordCounts = (item: KehadiranData) => {
@@ -281,6 +294,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
   const [asesmenList, setAsesmenList] = useState<AsesmenData[]>([]);
   const [kunjunganList, setKunjunganList] = useState<KunjunganRumahData[]>([]);
   const [kehadiranList, setKehadiranList] = useState<KehadiranData[]>([]);
+  const [snbpList, setSnbpList] = useState<SnbpData[]>([]);
   const [searchKehadiranQuery, setSearchKehadiranQuery] = useState('');
 
   // Toast notifier
@@ -296,6 +310,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     const storedAsesmen = localStorage.getItem(`bk_asesmen_${classNameFilter}`);
     const storedKunjungan = localStorage.getItem(`bk_kunjungan_${classNameFilter}`);
     const storedKehadiran = localStorage.getItem(`bk_kehadiran_${classNameFilter}`);
+    const storedSnbp = localStorage.getItem(`bk_snbp_${classNameFilter}`);
 
     if (storedKonseling) setKonselingList(JSON.parse(storedKonseling));
     else setKonselingList([]);
@@ -308,6 +323,9 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
 
     if (storedKehadiran) setKehadiranList(JSON.parse(storedKehadiran));
     else setKehadiranList([]);
+
+    if (storedSnbp) setSnbpList(JSON.parse(storedSnbp));
+    else setSnbpList([]);
 
     setSearchKehadiranQuery('');
 
@@ -357,6 +375,15 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
       nomorSurat: '023/BK-NP/VII/2026',
       perihal: 'Pemanggilan Orang Tua / Koordinasi Perilaku'
     });
+
+    setFormSnbp({
+      nis: '',
+      namaUniversitas: '',
+      programStudi: '',
+      keteranganLulus: 'Lulus',
+      tahun: new Date().getFullYear().toString(),
+      catatan: ''
+    });
   }, [classNameFilter]);
 
   // Save helpers
@@ -375,6 +402,10 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
   const saveKehadiran = (list: KehadiranData[]) => {
     setKehadiranList(list);
     localStorage.setItem(`bk_kehadiran_${classNameFilter}`, JSON.stringify(list));
+  };
+  const saveSnbp = (list: SnbpData[]) => {
+    setSnbpList(list);
+    localStorage.setItem(`bk_snbp_${classNameFilter}`, JSON.stringify(list));
   };
 
   // ------------------ 1. SUB-FITUR: KONSELING SISWA ------------------
@@ -656,6 +687,105 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     downloadWordDoc(`Laporan_HomeVisit_${item.nis}_${item.tanggalKunjungan}.doc`, htmlContent);
   };
 
+  const handleExportKonselingWord = (item: KonselingData) => {
+    const formattedDate = new Date(item.tanggal).toLocaleDateString('id-ID', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    const studentObj = siswa.find(s => s.nis === item.nis);
+
+    const htmlContent = `
+      <div class="kop-header">
+        <div class="kop-title">YAYASAN ALDIANA NUSANTARA</div>
+        <div class="kop-title" style="font-size: 16pt;">${classNameFilter}</div>
+        <div class="kop-sub" style="font-weight: bold;">Sistem Integrasi Kesiswaan - Bimbingan dan Konseling</div>
+        <div class="kop-sub" style="font-size: 9pt;">Alamat : Jl. Tarmanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan</div>
+      </div>
+
+      <div class="doc-title">LAPORAN HASIL GURU BIMBINGAN DAN KONSELING SISWA</div>
+
+      <p>Berikut adalah draf ringkasan layanan bimbingan konseling yang telah dilaksanakan untuk siswa bersangkutan:</p>
+
+      <table class="meta-table">
+        <tr>
+          <td style="width: 25%; font-weight: bold;">Nama Siswa</td>
+          <td style="width: 3%;">:</td>
+          <td style="width: 72%; font-weight: bold; text-transform: uppercase;">${item.namaSiswa}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: bold;">NIS</td>
+          <td>:</td>
+          <td>${item.nis}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: bold;">Kelas</td>
+          <td>:</td>
+          <td>${item.kelas}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: bold;">Orang Tua / Wali</td>
+          <td>:</td>
+          <td>${studentObj?.namaOrangTua || '-'}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: bold;">No. Telepon Kontak</td>
+          <td>:</td>
+          <td>${studentObj?.noHp || '-'}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: bold;">Jenis Konseling</td>
+          <td>:</td>
+          <td>${item.jenisKonseling}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: bold;">Hari, Tanggal Layanan</td>
+          <td>:</td>
+          <td>${formattedDate}</td>
+        </tr>
+      </table>
+
+      <div class="section-title">A. PERMASALAHAN UTAMA</div>
+      <p>${item.permasalahanUtama || '-'}</p>
+
+      <div class="section-title">B. ANALISIS GURU BIMBINGAN DAN KONSELING (BK)</div>
+      <p>${item.analisisBK || '-'}</p>
+
+      <div class="section-title">C. SOLUSI DAN REKOMENDASI YANG DITAWARKAN</div>
+      <p>${item.solusiRekomendasi || '-'}</p>
+
+      <div class="section-title">D. HASIL EVALUASI LAYANAN</div>
+      <p>${item.hasilEvaluasi || '-'}</p>
+
+      <div class="section-title">E. TINDAK LANJUT (FOLLOW-UP)</div>
+      <p>${item.tindakLanjut || '-'}</p>
+
+      <p style="margin-top: 30px;">Demikian laporan bimbingan konseling ini dibuat untuk dipergunakan sebagaimana mestinya dalam pembinaan perkembangan siswa.</p>
+
+      <table class="signature-block">
+        <tr>
+          <td>
+            <p>Siswa Bersangkutan,</p>
+            <br/><br/><br/><br/>
+            <p style="font-weight: bold;">( ${item.namaSiswa} )</p>
+          </td>
+          <td>
+            <p>Jakarta, ${new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            <p>Guru Pembimbing / BK,</p>
+            <br/><br/><br/><br/>
+            <p style="font-weight: bold; text-decoration: underline;">${currentUser.nama}</p>
+            <p style="font-size: 9pt; margin-top: -10px;">NIP. / NUPTK. -</p>
+          </td>
+        </tr>
+      </table>
+    `;
+
+    downloadWordDoc(`Laporan_Konseling_${item.nis}_${item.tanggal}.doc`, htmlContent);
+    showLocalToast('Laporan Konseling diunduh dalam format Word (.doc)');
+  };
+
 
   // ------------------ 4. SUB-FITUR: REKAP KEHADIRAN BK ------------------
   const [formKehadiran, setFormKehadiran] = useState({
@@ -819,15 +949,219 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     // Document title
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text('LAPORAN DAFTAR REKAPITULASI PRESENSI & ABSENSI SISWA', 105, currentY, { align: 'center' });
+    doc.text('LAPORAN REKAPITULASI PRESENSI & GRAFIK ABSENSI SISWA', 105, currentY, { align: 'center' });
     currentY += 10;
 
     // Metadata
-    doc.setFontSize(10);
+    doc.setFontSize(9.5);
     doc.setFont('helvetica', 'normal');
     doc.text(`Dicetak Oleh: ${currentUser.nama} (${currentUser.role})`, 15, currentY);
     doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 140, currentY);
-    currentY += 8;
+    currentY += 10;
+
+    // --- SECTION A: REKAPITULASI PRESENSI PER-KELAS & DIAGRAM ---
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.text('A. DIAGRAM & REKAPITULASI PRESENSI PER-KELAS', 15, currentY);
+    currentY += 6;
+
+    // Legend
+    doc.setFillColor(16, 185, 129); doc.rect(15, currentY, 3, 3, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.text('Hadir', 19, currentY + 2.5);
+
+    doc.setFillColor(59, 130, 246); doc.rect(30, currentY, 3, 3, 'F');
+    doc.text('Sakit', 34, currentY + 2.5);
+
+    doc.setFillColor(245, 158, 11); doc.rect(45, currentY, 3, 3, 'F');
+    doc.text('Izin', 49, currentY + 2.5);
+
+    doc.setFillColor(239, 68, 68); doc.rect(60, currentY, 3, 3, 'F');
+    doc.text('Alfa', 64, currentY + 2.5);
+    currentY += 7;
+
+    if (barChartClassData.length === 0) {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8.5);
+      doc.text('Belum ada data rekapitulasi per kelas.', 15, currentY);
+      currentY += 8;
+    } else {
+      barChartClassData.forEach((clItem: any) => {
+        if (currentY > 265) {
+          doc.addPage();
+          currentY = 20;
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.text(`Kelas: ${clItem.kelas}`, 15, currentY + 3.5);
+
+        // Draw stacked diagram
+        const totalCl = clItem.Hadir + clItem.Sakit + clItem.Izin + clItem.Alfa;
+        const barStartX = 45;
+        const barTotalWidth = 85;
+        const barHeight = 4.5;
+
+        // Background track
+        doc.setFillColor(241, 245, 249);
+        doc.rect(barStartX, currentY, barTotalWidth, barHeight, 'F');
+
+        if (totalCl > 0) {
+          let currX = barStartX;
+          
+          // Hadir (Green)
+          if (clItem.Hadir > 0) {
+            const wHadir = (clItem.Hadir / totalCl) * barTotalWidth;
+            doc.setFillColor(16, 185, 129);
+            doc.rect(currX, currentY, wHadir, barHeight, 'F');
+            currX += wHadir;
+          }
+          
+          // Sakit (Blue)
+          if (clItem.Sakit > 0) {
+            const wSakit = (clItem.Sakit / totalCl) * barTotalWidth;
+            doc.setFillColor(59, 130, 246);
+            doc.rect(currX, currentY, wSakit, barHeight, 'F');
+            currX += wSakit;
+          }
+
+          // Izin (Amber)
+          if (clItem.Izin > 0) {
+            const wIzin = (clItem.Izin / totalCl) * barTotalWidth;
+            doc.setFillColor(245, 158, 11);
+            doc.rect(currX, currentY, wIzin, barHeight, 'F');
+            currX += wIzin;
+          }
+
+          // Alfa (Red)
+          if (clItem.Alfa > 0) {
+            const wAlfa = (clItem.Alfa / totalCl) * barTotalWidth;
+            doc.setFillColor(239, 68, 68);
+            doc.rect(currX, currentY, wAlfa, barHeight, 'F');
+            currX += wAlfa;
+          }
+        }
+
+        // Print stats numbers text
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        const statsStr = `H: ${clItem.Hadir} | S: ${clItem.Sakit} | I: ${clItem.Izin} | A: ${clItem.Alfa} (Tot: ${totalCl})`;
+        doc.text(statsStr, barStartX + barTotalWidth + 4, currentY + 3.5);
+
+        currentY += 8;
+      });
+    }
+
+    currentY += 6;
+
+    // --- SECTION B: REKAPITULASI PRESENSI PER-BULAN & DIAGRAM ---
+    if (currentY > 240) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.text('B. DIAGRAM & REKAPITULASI PRESENSI PER-BULAN', 15, currentY);
+    currentY += 6;
+
+    // Legend repeated for readability on page break
+    doc.setFillColor(16, 185, 129); doc.rect(15, currentY, 3, 3, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.text('Hadir', 19, currentY + 2.5);
+
+    doc.setFillColor(59, 130, 246); doc.rect(30, currentY, 3, 3, 'F');
+    doc.text('Sakit', 34, currentY + 2.5);
+
+    doc.setFillColor(245, 158, 11); doc.rect(45, currentY, 3, 3, 'F');
+    doc.text('Izin', 49, currentY + 2.5);
+
+    doc.setFillColor(239, 68, 68); doc.rect(60, currentY, 3, 3, 'F');
+    doc.text('Alfa', 64, currentY + 2.5);
+    currentY += 7;
+
+    if (monthlyStatusSummary.length === 0) {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8.5);
+      doc.text('Belum ada data rekapitulasi bulanan.', 15, currentY);
+      currentY += 8;
+    } else {
+      monthlyStatusSummary.forEach((mItem: any) => {
+        if (currentY > 265) {
+          doc.addPage();
+          currentY = 20;
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.text(`Bulan: ${mItem.bulan}`, 15, currentY + 3.5);
+
+        // Draw stacked diagram
+        const totalM = mItem.Hadir + mItem.Sakit + mItem.Izin + mItem.Alfa;
+        const barStartX = 45;
+        const barTotalWidth = 85;
+        const barHeight = 4.5;
+
+        // Background track
+        doc.setFillColor(241, 245, 249);
+        doc.rect(barStartX, currentY, barTotalWidth, barHeight, 'F');
+
+        if (totalM > 0) {
+          let currX = barStartX;
+          
+          // Hadir (Green)
+          if (mItem.Hadir > 0) {
+            const wHadir = (mItem.Hadir / totalM) * barTotalWidth;
+            doc.setFillColor(16, 185, 129);
+            doc.rect(currX, currentY, wHadir, barHeight, 'F');
+            currX += wHadir;
+          }
+          
+          // Sakit (Blue)
+          if (mItem.Sakit > 0) {
+            const wSakit = (mItem.Sakit / totalM) * barTotalWidth;
+            doc.setFillColor(59, 130, 246);
+            doc.rect(currX, currentY, wSakit, barHeight, 'F');
+            currX += wSakit;
+          }
+
+          // Izin (Amber)
+          if (mItem.Izin > 0) {
+            const wIzin = (mItem.Izin / totalM) * barTotalWidth;
+            doc.setFillColor(245, 158, 11);
+            doc.rect(currX, currentY, wIzin, barHeight, 'F');
+            currX += wIzin;
+          }
+
+          // Alfa (Red)
+          if (mItem.Alfa > 0) {
+            const wAlfa = (mItem.Alfa / totalM) * barTotalWidth;
+            doc.setFillColor(239, 68, 68);
+            doc.rect(currX, currentY, wAlfa, barHeight, 'F');
+            currX += wAlfa;
+          }
+        }
+
+        // Print stats numbers text
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        const statsStr = `H: ${mItem.Hadir} | S: ${mItem.Sakit} | I: ${mItem.Izin} | A: ${mItem.Alfa} (Tot: ${totalM})`;
+        doc.text(statsStr, barStartX + barTotalWidth + 4, currentY + 3.5);
+
+        currentY += 8;
+      });
+    }
+
+    currentY += 10;
+
+    // --- SECTION C: RINCIAN JURNAL ABSENSI DETAIL SISWA ---
+    if (currentY > 230) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.text('C. RINCIAN JURNAL ABSENSI DETAIL SISWA', 15, currentY);
+    currentY += 6;
 
     // Table Headers
     const drawTableHeader = (y: number) => {
@@ -853,7 +1187,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
       doc.text('Belum ada data rekapitulasi kehadiran siswa.', 105, currentY + 6.5, { align: 'center' });
       currentY += 10;
     } else {
-      kehadiranList.forEach((item, idx) => {
+      kehadiranList.forEach((item) => {
         if (currentY > 260) {
           doc.addPage();
           currentY = 20;
@@ -863,6 +1197,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
         }
 
         const counts = getRecordCounts(item);
+        doc.setFontSize(8);
         doc.text(item.nis, 17, currentY + 5);
         const truncName = item.namaSiswa.length > 20 ? item.namaSiswa.substring(0, 18) + '..' : item.namaSiswa;
         doc.text(truncName, 38, currentY + 5);
@@ -883,17 +1218,19 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
       });
     }
 
-    currentY += 15;
-    if (currentY > 250) {
+    currentY += 10;
+    if (currentY > 230) {
       doc.addPage();
       currentY = 25;
     }
 
     // Attendance Summary counts in PDF
     doc.setFont('helvetica', 'bold');
-    doc.text('RINGKASAN TOTAL PRESENSI:', 15, currentY);
+    doc.setFontSize(9);
+    doc.text('AKUMULASI TOTAL REKAPITULASI PRESENSI:', 15, currentY);
     currentY += 6;
     doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
     doc.text(`Total Hadir : ${statusCounts.Hadir} records`, 20, currentY);
     doc.text(`Total Sakit : ${statusCounts.Sakit} records`, 110, currentY);
     currentY += 5;
@@ -903,6 +1240,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
 
     // Signatures
     const signY = currentY;
+    doc.setFontSize(8.5);
     doc.text('Diketahui Oleh,', 25, signY);
     doc.text('Kepala Sekolah / Wali Kelas,', 25, signY + 5);
     doc.line(25, signY + 23, 75, signY + 23);
@@ -914,7 +1252,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     doc.text(currentUser.nama, 140, signY + 27);
 
     doc.save(`Rekap_Kehadiran_BK_${classNameFilter.replace(/\s+/g, '_')}.pdf`);
-    showLocalToast('Laporan Rekap Absensi BK diunduh dalam format PDF.');
+    showLocalToast('Laporan Rekap Absensi & Diagram BK diunduh dalam format PDF.');
   };
 
 
@@ -1081,6 +1419,200 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     downloadWordDoc(`Surat_Resmi_BK_${generatedLetter.nis}.doc`, letterHtmlContent);
   };
 
+  // ------------------ 6. SUB-FITUR: LAPORAN SNBP ------------------
+  const [formSnbp, setFormSnbp] = useState({
+    nis: '',
+    namaUniversitas: '',
+    programStudi: '',
+    keteranganLulus: 'Lulus' as 'Lulus' | 'Tidak Lulus',
+    tahun: '2026',
+    catatan: ''
+  });
+
+  const handleAddSnbp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formSnbp.nis) {
+      showLocalToast('Pilih siswa terlebih dahulu!', 'error');
+      return;
+    }
+    const studentObj = schoolStudents.find(s => s.nis === formSnbp.nis);
+    if (!studentObj) return;
+
+    if (snbpList.some(item => item.nis === formSnbp.nis)) {
+      showLocalToast('Laporan SNBP untuk siswa ini sudah ada! Silakan hapus data lama terlebih dahulu jika ingin memperbarui.', 'error');
+      return;
+    }
+
+    const newSnbp: SnbpData = {
+      id: 'SNBP-' + Date.now(),
+      nis: formSnbp.nis,
+      namaSiswa: studentObj.nama,
+      kelas: studentObj.kelas,
+      namaUniversitas: formSnbp.namaUniversitas || '-',
+      programStudi: formSnbp.programStudi || '-',
+      keteranganLulus: formSnbp.keteranganLulus,
+      tahun: formSnbp.tahun,
+      catatan: formSnbp.catatan
+    };
+
+    saveSnbp([newSnbp, ...snbpList]);
+    showLocalToast('Berhasil menambahkan Laporan SNBP siswa.');
+    
+    setFormSnbp({
+      nis: '',
+      namaUniversitas: '',
+      programStudi: '',
+      keteranganLulus: 'Lulus',
+      tahun: new Date().getFullYear().toString(),
+      catatan: ''
+    });
+  };
+
+  const handleDeleteSnbp = (id: string) => {
+    const updated = snbpList.filter(item => item.id !== id);
+    saveSnbp(updated);
+    showLocalToast('Laporan SNBP berhasil dihapus.', 'success');
+  };
+
+  const handleExportSnbpPDF = () => {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    let currentY = 15;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('YAYASAN ALDIANA NUSANTARA', 105, currentY, { align: 'center' });
+    currentY += 4.5;
+    
+    doc.setFontSize(13);
+    doc.text(classNameFilter, 105, currentY, { align: 'center' });
+    currentY += 4.5;
+    
+    doc.setFontSize(9);
+    doc.text('Sistem Integrasi Kesiswaan - Bimbingan dan Konseling', 105, currentY, { align: 'center' });
+    currentY += 4;
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.text('Alamat : Jl. Tarmanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan', 105, currentY, { align: 'center' });
+    currentY += 3;
+
+    doc.setLineWidth(0.6);
+    doc.line(15, currentY, 195, currentY);
+    doc.setLineWidth(0.2);
+    doc.line(15, currentY + 0.8, 195, currentY + 0.8);
+    currentY += 8;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('LAPORAN HASIL SELEKSI NASIONAL BERDASARKAN PRESTASI (SNBP)', 105, currentY, { align: 'center' });
+    currentY += 10;
+
+    doc.setFontSize(9.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Dicetak Oleh: ${currentUser.nama} (${currentUser.role})`, 15, currentY);
+    doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 140, currentY);
+    currentY += 10;
+
+    const drawTableHeader = (y: number) => {
+      doc.setFillColor(240, 243, 246);
+      doc.rect(15, y, 180, 8, 'F');
+      doc.rect(15, y, 180, 8, 'S');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.text('NIS', 17, y + 5.5);
+      doc.text('Nama Siswa', 35, y + 5.5);
+      doc.text('Kelas', 80, y + 5.5);
+      doc.text('Universitas', 100, y + 5.5);
+      doc.text('Program Studi', 145, y + 5.5);
+      doc.text('Status', 180, y + 5.5);
+    };
+
+    drawTableHeader(currentY);
+    currentY += 8;
+    doc.setFont('helvetica', 'normal');
+
+    if (snbpList.length === 0) {
+      doc.rect(15, currentY, 180, 10, 'S');
+      doc.text('Belum ada data laporan seleksi SNBP.', 105, currentY + 6.5, { align: 'center' });
+      currentY += 10;
+    } else {
+      snbpList.forEach((item) => {
+        if (currentY > 260) {
+          doc.addPage();
+          currentY = 20;
+          drawTableHeader(currentY);
+          currentY += 8;
+          doc.setFont('helvetica', 'normal');
+        }
+
+        doc.setFontSize(8);
+        doc.text(item.nis, 17, currentY + 5);
+        const truncName = item.namaSiswa.length > 20 ? item.namaSiswa.substring(0, 18) + '..' : item.namaSiswa;
+        doc.text(truncName, 35, currentY + 5);
+        doc.text(item.kelas, 80, currentY + 5);
+        
+        const truncUni = item.namaUniversitas.length > 22 ? item.namaUniversitas.substring(0, 20) + '..' : item.namaUniversitas;
+        doc.text(truncUni, 100, currentY + 5);
+
+        const truncProdi = item.programStudi.length > 18 ? item.programStudi.substring(0, 16) + '..' : item.programStudi;
+        doc.text(truncProdi, 145, currentY + 5);
+
+        doc.setFont('helvetica', 'bold');
+        if (item.keteranganLulus === 'Lulus') {
+          doc.setTextColor(16, 185, 129);
+        } else {
+          doc.setTextColor(239, 68, 68);
+        }
+        doc.text(item.keteranganLulus, 180, currentY + 5);
+        doc.setTextColor(0, 0, 0);
+        doc.setFont('helvetica', 'normal');
+
+        doc.rect(15, currentY, 180, 7.5, 'S');
+        currentY += 7.5;
+      });
+    }
+
+    currentY += 10;
+    if (currentY > 230) {
+      doc.addPage();
+      currentY = 25;
+    }
+
+    const totalSnbp = snbpList.length;
+    const lulusCount = snbpList.filter(item => item.keteranganLulus === 'Lulus').length;
+    const tidakLulusCount = totalSnbp - lulusCount;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text('REKAPITULASI KELULUSAN SNBP:', 15, currentY);
+    currentY += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.text(`Total Siswa Terdaftar : ${totalSnbp} Siswa`, 20, currentY);
+    doc.text(`Total Lulus SNBP      : ${lulusCount} Siswa`, 20, currentY + 5);
+    doc.text(`Total Tidak Lulus      : ${tidakLulusCount} Siswa`, 20, currentY + 10);
+    currentY += 20;
+
+    const signY = currentY;
+    doc.setFontSize(8.5);
+    doc.text('Diketahui Oleh,', 25, signY);
+    doc.text('Kepala Sekolah / Wakasek Kurikulum,', 25, signY + 5);
+    doc.line(25, signY + 23, 75, signY + 23);
+
+    doc.text('Disusun Oleh,', 140, signY);
+    doc.text('Guru Bimbingan Konseling (BK),', 140, signY + 5);
+    doc.line(140, signY + 23, 185, signY + 23);
+    doc.setFont('helvetica', 'bold');
+    doc.text(currentUser.nama, 140, signY + 27);
+
+    doc.save(`Laporan_SNBP_${classNameFilter.replace(/\s+/g, '_')}.pdf`);
+    showLocalToast('Laporan SNBP berhasil diunduh dalam format PDF.');
+  };
+
   const filteredKehadiranList = kehadiranList.filter(item => {
     if (!searchKehadiranQuery.trim()) return true;
     const q = searchKehadiranQuery.toLowerCase().trim();
@@ -1128,7 +1660,10 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
           { id: 'asesmen', label: 'Asesmen BK', icon: BookMarked },
           { id: 'kunjungan', label: 'Kunjungan Rumah', icon: Home },
           { id: 'kehadiran', label: 'Rekap Kehadiran', icon: CheckSquare },
-          { id: 'surat', label: 'Generator Surat', icon: FileCheck }
+          { id: 'surat', label: 'Generator Surat', icon: FileCheck },
+          ...((classNameFilter === 'SMA NUSANTARA PLUS' || 
+               classNameFilter === 'SMK NUSANTARA 1' || 
+               classNameFilter === 'SMK 2 KESEHATAN') ? [{ id: 'snbp', label: 'Laporan SNBP', icon: GraduationCap }] : [])
         ].map(tb => {
           const Icon = tb.icon;
           const isActive = activeTab === tb.id;
@@ -1296,13 +1831,14 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                         <th className="py-3 px-4">Jenis</th>
                         <th className="py-3 px-4">Permasalahan Utama</th>
                         <th className="py-3 px-4">Solusi & Tindak Lanjut</th>
+                        <th className="py-3 px-4 text-center">Unduh DOC</th>
                         <th className="py-3 px-4 text-center">Aksi</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-600 text-[11px]">
                       {konselingList.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="py-8 text-center italic text-slate-400 font-medium">
+                          <td colSpan={6} className="py-8 text-center italic text-slate-400 font-medium">
                             Belum ada rekam data konseling yang diinput.
                           </td>
                         </tr>
@@ -1332,6 +1868,15 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                             <td className="py-3.5 px-4 leading-normal max-w-xs">
                               <b className="text-slate-800 block text-[11px] mb-0.5">Solusi:</b> {item.solusiRekomendasi}
                               <b className="text-emerald-600 block text-[10px] mt-1.5">Tindak Lanjut:</b> {item.tindakLanjut}
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <button
+                                onClick={() => handleExportKonselingWord(item)}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg cursor-pointer transition-colors border border-indigo-100/60 text-[10px]"
+                                title="Unduh Laporan Konseling Word (.doc)"
+                              >
+                                <Download className="w-3 h-3 text-indigo-600" /> Word (.doc)
+                              </button>
                             </td>
                             <td className="py-3.5 px-4 text-center">
                               <button
@@ -2221,6 +2766,186 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
 
                   </div>
                 )}
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ================== TAB 6: LAPORAN SNBP ================== */}
+        {activeTab === 'snbp' && (
+          <div className="space-y-8 animate-in fade-in duration-200">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              
+              {/* Form Input Laporan SNBP */}
+              <div className="lg:col-span-1 bg-slate-50 rounded-2xl border border-slate-200 p-5 space-y-4">
+                <div className="pb-3 border-b border-slate-200/60">
+                  <span className="text-[10px] text-indigo-600 font-extrabold uppercase tracking-wider block">Prestasi Alumni & Seleksi</span>
+                  <h3 className="font-extrabold text-slate-800 text-sm">Input Laporan SNBP</h3>
+                </div>
+
+                <form onSubmit={handleAddSnbp} className="space-y-4 text-xs font-semibold text-slate-700">
+                  {/* Student Search Dropdown */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-slate-400 uppercase block">Nama Siswa / Murid (Dropdown Search) *</label>
+                    <SearchableSiswaSelect
+                      students={schoolStudents}
+                      selectedValue={formSnbp.nis}
+                      onChange={(nis) => setFormSnbp(prev => ({ ...prev, nis }))}
+                      placeholder="Cari & pilih nama siswa..."
+                    />
+                    <input type="hidden" name="snbp_siswa_nis" value={formSnbp.nis} required />
+                  </div>
+
+                  {/* Keterangan Lulus Dropdown */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-slate-400 uppercase block">Keterangan Kelulusan (Dropdown) *</label>
+                    <select
+                      required
+                      value={formSnbp.keteranganLulus}
+                      onChange={(e) => setFormSnbp(prev => ({ ...prev, keteranganLulus: e.target.value as 'Lulus' | 'Tidak Lulus' }))}
+                      className="w-full px-3 py-2.5 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-xs cursor-pointer transition-all"
+                    >
+                      <option value="Lulus">Lulus</option>
+                      <option value="Tidak Lulus">Tidak Lulus</option>
+                    </select>
+                  </div>
+
+                  {/* Universitas */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-slate-400 uppercase block">Nama Universitas / PTN *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formSnbp.namaUniversitas}
+                      onChange={(e) => setFormSnbp(prev => ({ ...prev, namaUniversitas: e.target.value }))}
+                      placeholder="Contoh: Universitas Indonesia / ITB"
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-xs"
+                    />
+                  </div>
+
+                  {/* Program Studi */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-slate-400 uppercase block">Program Studi / Jurusan *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formSnbp.programStudi}
+                      onChange={(e) => setFormSnbp(prev => ({ ...prev, programStudi: e.target.value }))}
+                      placeholder="Contoh: Teknik Informatika / Kedokteran"
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-xs"
+                    />
+                  </div>
+
+                  {/* Tahun Seleksi */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-slate-400 uppercase block">Tahun Seleksi *</label>
+                    <input
+                      type="text"
+                      required
+                      value={formSnbp.tahun}
+                      onChange={(e) => setFormSnbp(prev => ({ ...prev, tahun: e.target.value }))}
+                      placeholder="Contoh: 2026"
+                      className="w-full px-3.5 py-2.5 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-xs"
+                    />
+                  </div>
+
+                  {/* Catatan Tambahan */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-slate-400 uppercase block">Catatan Pendukung (Opsional)</label>
+                    <textarea
+                      value={formSnbp.catatan}
+                      onChange={(e) => setFormSnbp(prev => ({ ...prev, catatan: e.target.value }))}
+                      placeholder="Peringkat paralel, nilai rata-rata raport, dll..."
+                      rows={2}
+                      className="w-full px-3.5 py-2 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-medium text-xs leading-relaxed"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" /> Simpan Laporan SNBP
+                  </button>
+                </form>
+              </div>
+
+              {/* Tabel Laporan SNBP */}
+              <div className="lg:col-span-2 space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <h3 className="font-extrabold text-slate-800 text-sm">Daftar Hasil Seleksi SNBP Siswa</h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleExportSnbpPDF}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl transition-all cursor-pointer text-xs shadow-sm"
+                    >
+                      <Download className="w-3.5 h-3.5 text-white" /> Unduh Laporan PDF
+                    </button>
+                    <span className="text-[10px] font-bold font-mono text-slate-400">Total: {snbpList.length} siswa</span>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 text-[10px] text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
+                        <th className="py-3 px-4">Siswa / Kelas</th>
+                        <th className="py-3 px-4">Tahun</th>
+                        <th className="py-3 px-4">Universitas / Prodi</th>
+                        <th className="py-3 px-4 text-center">Status Kelulusan</th>
+                        <th className="py-3 px-4">Catatan</th>
+                        <th className="py-3 px-4 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-600 text-[11px]">
+                      {snbpList.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center italic text-slate-400 font-medium">
+                            Belum ada rekam data kelulusan SNBP yang diinput untuk sekolah ini.
+                          </td>
+                        </tr>
+                      ) : (
+                        snbpList.map(item => (
+                          <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="py-3.5 px-4 font-semibold text-slate-800">
+                              <span className="block font-bold">{item.namaSiswa}</span>
+                              <span className="text-[9px] text-slate-400 font-mono">NIS: {item.nis} | {item.kelas}</span>
+                            </td>
+                            <td className="py-3.5 px-4 font-semibold font-mono text-[10px] text-slate-500">
+                              {item.tahun}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <b className="text-slate-800 block text-[11px] mb-0.5">{item.namaUniversitas}</b>
+                              <span className="text-indigo-600 text-[10px] font-semibold">{item.programStudi}</span>
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black border ${
+                                item.keteranganLulus === 'Lulus'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                  : 'bg-rose-50 text-rose-700 border-rose-100'
+                              }`}>
+                                {item.keteranganLulus}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 leading-normal max-w-xs font-medium italic text-slate-500">
+                              {item.catatan || '-'}
+                            </td>
+                            <td className="py-3.5 px-4 text-center">
+                              <button
+                                onClick={() => handleDeleteSnbp(item.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                                title="Hapus Laporan"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
             </div>
