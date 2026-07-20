@@ -1,11 +1,13 @@
 import { Siswa, Pelanggaran, Pencatatan, Pembinaan, AuthResponse, ApiResponse } from '../types';
 
-// Helper to get active auth token
+// Helper to get active auth token and Google Script URL for stateless serverless environments like Vercel
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('auth_token');
+  const googleScriptUrl = localStorage.getItem('google_script_url') || '';
   return {
     'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    ...(googleScriptUrl ? { 'x-google-script-url': googleScriptUrl } : {})
   };
 }
 
@@ -25,15 +27,35 @@ export const googleSheetApi = {
     }
   },
 
-  // 2. Fetch config status
+  // 2. Fetch config status with client-side self-healing
   async getConfig(): Promise<ApiResponse<{ isGoogleScriptConnected: boolean; googleScriptUrl: string }>> {
     try {
       const response = await fetch('/api/settings/config', {
         headers: getAuthHeaders()
       });
-      return await response.json();
+      const data = await response.json();
+      
+      if (data.success && data.data && data.data.googleScriptUrl) {
+        localStorage.setItem('google_script_url', data.data.googleScriptUrl);
+      } else {
+        // Self-heal stateless server if local storage has the URL but the server lost it (due to container scale-down/restart)
+        const localUrl = localStorage.getItem('google_script_url');
+        if (localUrl && (!data.data || !data.data.googleScriptUrl)) {
+          console.log('[Self-Healing] Memulihkan GOOGLE_SCRIPT_URL dari local storage ke server...');
+          this.saveConfig(localUrl);
+          if (data.data) {
+            data.data.isGoogleScriptConnected = true;
+            data.data.googleScriptUrl = localUrl;
+          }
+        }
+      }
+      return data;
     } catch (error) {
-      console.error('Fetch config error:', error);
+      console.error('Fetch config error, falling back to local storage:', error);
+      const localUrl = localStorage.getItem('google_script_url');
+      if (localUrl) {
+        return { success: true, data: { isGoogleScriptConnected: true, googleScriptUrl: localUrl } };
+      }
       return { success: false, message: 'Gagal mengambil data konfigurasi.' };
     }
   },
@@ -54,6 +76,12 @@ export const googleSheetApi = {
   // Save config URL
   async saveConfig(googleScriptUrl: string): Promise<ApiResponse<any>> {
     try {
+      if (googleScriptUrl) {
+        localStorage.setItem('google_script_url', googleScriptUrl);
+      } else {
+        localStorage.removeItem('google_script_url');
+      }
+      
       const response = await fetch('/api/settings/config', {
         method: 'POST',
         headers: getAuthHeaders(),

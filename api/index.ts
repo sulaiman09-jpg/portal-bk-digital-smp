@@ -474,8 +474,8 @@ function recalculatePembinaan(nis: string, db: DBStructure, tanggalPencatatan: s
 }
 
 // Dynamic proxy logic for Google Apps Script with robust redirect following
-async function proxyToGoogleScript(action: string, method: 'GET' | 'POST', body: any = null) {
-  const scriptUrl = process.env.GOOGLE_SCRIPT_URL;
+async function proxyToGoogleScript(action: string, method: 'GET' | 'POST', body: any = null, customUrl?: string) {
+  const scriptUrl = customUrl || process.env.GOOGLE_SCRIPT_URL;
   if (!scriptUrl) {
     throw new Error('Google Script URL is not configured.');
   }
@@ -603,11 +603,12 @@ apiRouter.post('/auth/login', (req, res) => {
 
 // Settings & Config status API
 apiRouter.get('/settings/config', (req, res) => {
+  const googleScriptUrl = (req.headers['x-google-script-url'] as string) || process.env.GOOGLE_SCRIPT_URL || '';
   res.json({
     success: true,
     data: {
-      isGoogleScriptConnected: !!process.env.GOOGLE_SCRIPT_URL,
-      googleScriptUrl: process.env.GOOGLE_SCRIPT_URL || ''
+      isGoogleScriptConnected: !!googleScriptUrl,
+      googleScriptUrl: googleScriptUrl
     }
   });
 });
@@ -726,24 +727,25 @@ let lastAutoSyncTime = 0;
 // General Data API Endpoint matching Google Apps Script proxy requirements
 apiRouter.get('/data', async (req, res) => {
   const action = req.query.action as string;
+  const scriptUrl = (req.headers['x-google-script-url'] as string) || process.env.GOOGLE_SCRIPT_URL || '';
 
-  // For maximum speed and offline-first performance, we serve all GET operations directly from the local database (0-5ms response time)
-  // This completely eliminates Google Sheets latency during regular app usage while ensuring the user always sees their latest data!
-  const db = readDB();
+  let db = readDB();
 
-  // If connected to Google Sheets, trigger a silent non-blocking background sync pull (cooldown: 15 seconds)
-  // This automatically captures any direct edits in Google Sheets and syncs them permanently into the app!
-  if (process.env.GOOGLE_SCRIPT_URL && (Date.now() - lastAutoSyncTime > 15000)) {
-    lastAutoSyncTime = Date.now();
-    
-    // Non-blocking background sync pull
-    (async () => {
+  // If connected to Google Sheets, perform a synchronous or background sync pull
+  if (scriptUrl) {
+    const isDefaultMockData = db.siswa.length === 8 && db.siswa.some(s => s.nis === '21001');
+    const hasCoolDownPassed = Date.now() - lastAutoSyncTime > 15000;
+
+    // Force synchronous/blocking sync if we have default mockup data (e.g. freshly started Vercel container)
+    // to prevent user from ever seeing incorrect/dummy data on different devices.
+    if (isDefaultMockData || hasCoolDownPassed) {
+      lastAutoSyncTime = Date.now();
       try {
-        console.log('[Auto-Sync Background] Memulai sinkronisasi otomatis dari Google Sheets...');
+        console.log(`[Auto-Sync] Menyelaraskan data secara langsung dari Google Sheets. URL: ${scriptUrl}`);
         const [studentRes, violationRes, recordRes] = await Promise.all([
-          proxyToGoogleScript('getStudents', 'GET'),
-          proxyToGoogleScript('getViolations', 'GET'),
-          proxyToGoogleScript('getRecords', 'GET')
+          proxyToGoogleScript('getStudents', 'GET', null, scriptUrl),
+          proxyToGoogleScript('getViolations', 'GET', null, scriptUrl),
+          proxyToGoogleScript('getRecords', 'GET', null, scriptUrl)
         ]);
 
         if (studentRes.success && violationRes.success && recordRes.success) {
@@ -753,13 +755,15 @@ apiRouter.get('/data', async (req, res) => {
             pencatatan: recordRes.data?.pencatatan || [],
             pembinaan: recordRes.data?.pembinaan || []
           };
-          writeDB(newDb);
-          console.log('[Auto-Sync Background] Sukses menyelaraskan data Google Sheets ke database lokal.');
+          const sanitized = sanitizeAndDeduplicate(newDb);
+          writeDB(sanitized);
+          db = sanitized;
+          console.log('[Auto-Sync] Berhasil memperbarui database lokal secara sinkron.');
         }
       } catch (err: any) {
-        console.warn('[Auto-Sync Background Alert] Gagal menyelaraskan otomatis:', err.message);
+        console.warn('[Auto-Sync Alert] Gagal menyelaraskan otomatis:', err.message);
       }
-    })();
+    }
   }
 
   switch (action) {
@@ -783,16 +787,20 @@ apiRouter.get('/data', async (req, res) => {
 apiRouter.post('/data', async (req, res) => {
   const action = req.query.action as string;
   const body = req.body || {};
+  const scriptUrl = (req.headers['x-google-script-url'] as string) || process.env.GOOGLE_SCRIPT_URL || '';
 
   const isSyncAction = action && action.startsWith('sync');
 
-  // For non-sync write actions (add/delete/edit), we process the write LOCALLY FIRST to return a response under 10ms.
-  // We then trigger the slow Google Sheets write asynchronously in the background.
-  // This solves any UI sluggishness and guarantees blazingly fast interface performance!
-  if (process.env.GOOGLE_SCRIPT_URL && !isSyncAction) {
-    proxyToGoogleScript(action, 'POST', body).catch(err => {
-      console.warn(`[Background Sync Fail] Failed to sync ${action} to Google Sheets in background:`, err.message);
-    });
+  // For serverless environments like Vercel, we must AWAIT the write operation to Google Sheets
+  // because background promises are instantly suspended or terminated once the response is returned.
+  if (scriptUrl && !isSyncAction) {
+    try {
+      console.log(`[Sync Write] Menyimpan perubahan (${action}) secara langsung ke Google Sheets...`);
+      await proxyToGoogleScript(action, 'POST', body, scriptUrl);
+      console.log(`[Sync Write] Berhasil menyelaraskan perubahan (${action}) ke Google Sheets.`);
+    } catch (err: any) {
+      console.warn(`[Sync Write Fail] Gagal menulis perubahan ke Google Sheets:`, err.message);
+    }
   }
 
   const db = readDB();
