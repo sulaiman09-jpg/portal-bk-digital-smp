@@ -216,6 +216,7 @@ function sanitizeAndDeduplicate(db: DBStructure): DBStructure {
 
     uniqueSiswa.push({
       ...s,
+      id: s.id && String(s.id).trim() ? String(s.id).trim() : 'S_' + cleanNis,
       nis: cleanNis,
       nama: cleanName
     });
@@ -243,6 +244,7 @@ function sanitizeAndDeduplicate(db: DBStructure): DBStructure {
 
     uniquePelanggaran.push({
       ...v,
+      id: v.id && String(v.id).trim() ? String(v.id).trim() : 'P_' + cleanKode,
       kode: cleanKode,
       namaPelanggaran: cleanNama,
       poin: Number(v.poin) || 0
@@ -717,16 +719,16 @@ apiRouter.get('/data', async (req, res) => {
         ]);
 
         if (studentRes.success && violationRes.success && recordRes.success) {
-          const rawMergedDb: DBStructure = {
-            siswa: [...(db.siswa || []), ...(studentRes.data || [])],
-            pelanggaran: [...(db.pelanggaran || []), ...(violationRes.data || [])],
-            pencatatan: [...(db.pencatatan || []), ...(recordRes.data?.pencatatan || [])],
-            pembinaan: [...(db.pembinaan || []), ...(recordRes.data?.pembinaan || [])]
+          const freshDb: DBStructure = {
+            siswa: [...(studentRes.data || []), ...(db.siswa || [])],
+            pelanggaran: (violationRes.data && violationRes.data.length > 0) ? violationRes.data : (db.pelanggaran || []),
+            pencatatan: recordRes.data?.pencatatan || [],
+            pembinaan: recordRes.data?.pembinaan || []
           };
-          const sanitized = sanitizeAndDeduplicate(rawMergedDb);
+          const sanitized = sanitizeAndDeduplicate(freshDb);
           writeDB(sanitized);
           db = sanitized;
-          console.log('[Auto-Sync] Berhasil memperbarui dan menggabungkan database lokal secara sinkron.');
+          console.log('[Auto-Sync] Berhasil memperbarui data dari Google Sheets secara murni.');
         }
       } catch (err: any) {
         console.warn('[Auto-Sync Alert] Gagal menyelaraskan otomatis:', err.message);
@@ -926,8 +928,8 @@ apiRouter.post('/data', async (req, res) => {
         }
 
         const newDb: DBStructure = {
-          siswa: studentRes.data || [],
-          pelanggaran: violationRes.data || [],
+          siswa: [...(studentRes.data || []), ...(db.siswa || [])],
+          pelanggaran: (violationRes.data && violationRes.data.length > 0) ? violationRes.data : (db.pelanggaran || []),
           pencatatan: recordRes.data?.pencatatan || [],
           pembinaan: recordRes.data?.pembinaan || []
         };
