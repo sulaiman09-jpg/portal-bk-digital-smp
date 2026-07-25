@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Siswa, Pelanggaran, User } from '../types';
-import { AlertCircle, Calendar, UserCheck, ShieldAlert, FileText, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, Calendar, UserCheck, ShieldAlert, FileText, CheckCircle2, Filter, ChevronDown, GraduationCap, Search, X } from 'lucide-react';
 
 interface InputPelanggaranFormProps {
   siswa: Siswa[];
@@ -32,12 +32,26 @@ export default function InputPelanggaranForm({
   const [fotoBase64, setFotoBase64] = useState('');
 
   // UI States
+  const [selectedClass, setSelectedClass] = useState('');
   const [searchSiswaQuery, setSearchSiswaQuery] = useState('');
   const [isSiswaDropdownOpen, setIsSiswaDropdownOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formSuccess, setFormSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [photoError, setPhotoError] = useState('');
+
+  // Extract unique sorted classes
+  const availableClasses = useMemo(() => {
+    const classSet = new Set<string>();
+    siswa.forEach(s => {
+      if (s.kelas && s.kelas.trim()) {
+        classSet.add(s.kelas.trim());
+      }
+    });
+    return Array.from(classSet).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+    );
+  }, [siswa]);
 
   // Pre-fill officer name when current user changes
   useEffect(() => {
@@ -49,6 +63,19 @@ export default function InputPelanggaranForm({
   // Find active selected objects for real-time calculations
   const selectedStudentObj = siswa.find(s => s.nis === selectedNis);
   const selectedViolationObj = violations.find(v => v.namaPelanggaran === selectedViolationName);
+
+  // Sync selectedClass when student is selected
+  useEffect(() => {
+    if (selectedStudentObj) {
+      setSelectedClass(selectedStudentObj.kelas.trim());
+    }
+  }, [selectedStudentObj]);
+
+  // Students filtered by class dropdown
+  const classFilteredSiswa = useMemo(() => {
+    if (!selectedClass) return siswa;
+    return siswa.filter(s => s.kelas.trim().toLowerCase() === selectedClass.trim().toLowerCase());
+  }, [siswa, selectedClass]);
 
   const getSearchScore = (name: string, nis: string, kelas: string, query: string) => {
     if (!query) return 0;
@@ -67,7 +94,7 @@ export default function InputPelanggaranForm({
   };
 
   // Search filtered student list
-  const filteredSiswaList = siswa
+  const filteredSiswaList = classFilteredSiswa
     .filter(s => {
       if (!searchSiswaQuery.trim()) return true;
       const q = searchSiswaQuery.toLowerCase().trim();
@@ -208,68 +235,144 @@ export default function InputPelanggaranForm({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* 1. SELECT SISWA (WITH DROPDOWN FILTER) */}
-          <div className="space-y-1.5 relative">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">1. Cari & Pilih Siswa</label>
-            
-            <div className="relative">
-              <input
-                id="siswa-selector-input"
-                type="text"
-                placeholder={selectedStudentObj ? `${selectedStudentObj.nama} (Kelas ${selectedStudentObj.kelas})` : "Ketik nama, NIS, atau kelas siswa..."}
-                value={searchSiswaQuery}
-                onFocus={() => setIsSiswaDropdownOpen(true)}
-                onChange={(e) => {
-                  setSearchSiswaQuery(e.target.value);
-                  setIsSiswaDropdownOpen(true);
-                  if (selectedNis) setSelectedNis(''); // Clear selection if user types
-                }}
-                className={`w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl outline-none transition-all ${selectedStudentObj ? 'border-emerald-300 bg-emerald-50/10 font-bold text-slate-900' : ''}`}
-              />
-              {selectedStudentObj && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedNis('');
-                    setSearchSiswaQuery('');
-                  }}
-                  className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-md"
-                >
-                  Ganti
-                </button>
-              )}
+          {/* 1. SELECT SISWA (WITH DROPDOWN FILTER & CLASS FILTER) */}
+          <div className="space-y-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-200">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block flex items-center gap-1.5">
+                <Filter className="w-4 h-4 text-blue-600" />
+                1. Kolom Kelas & Nama Siswa (Dropdown Filter) *
+              </label>
+              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 font-mono">
+                Total: {classFilteredSiswa.length} Siswa
+              </span>
             </div>
 
-            {/* Dropdown list */}
-            {isSiswaDropdownOpen && !selectedNis && (
-              <div className="absolute left-0 right-0 top-full mt-1.5 z-40 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-50">
-                {filteredSiswaList.length === 0 ? (
-                  <div className="p-4 text-center text-slate-400 italic text-xs">
-                    Siswa tidak ditemukan. Silakan cek nama atau NIS kembali.
-                  </div>
-                ) : (
-                  filteredSiswaList.map(s => (
-                    <div
-                      key={s.id}
-                      onClick={() => {
-                        setSelectedNis(s.nis);
-                        setSearchSiswaQuery(`${s.nama} (${s.kelas})`);
-                        setIsSiswaDropdownOpen(false);
-                      }}
-                      className="p-3 hover:bg-blue-50/50 cursor-pointer text-xs flex justify-between items-center transition-colors"
-                    >
-                      <div>
-                        <span className="font-bold text-slate-900 block">{s.nama}</span>
-                        <span className="text-slate-400 font-mono">NIS: {s.nis}</span>
-                      </div>
-                      <span className="px-2 py-0.5 rounded font-mono font-bold bg-slate-100 text-slate-600">
-                        Kelas {s.kelas}
-                      </span>
-                    </div>
-                  ))
+            {/* Dropdown 1: Kolom Kelas */}
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Kolom Kelas (Dropdown)</label>
+              <select
+                value={selectedClass}
+                onChange={(e) => {
+                  const newClass = e.target.value;
+                  setSelectedClass(newClass);
+                  if (selectedNis) {
+                    const st = siswa.find(s => s.nis === selectedNis);
+                    if (st && newClass && st.kelas.trim().toLowerCase() !== newClass.trim().toLowerCase()) {
+                      setSelectedNis('');
+                      setSearchSiswaQuery('');
+                    }
+                  }
+                }}
+                className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-xs text-slate-800 font-bold cursor-pointer"
+              >
+                <option value="">-- Semua Kelas ({siswa.length} Siswa) --</option>
+                {availableClasses.map(c => {
+                  const count = siswa.filter(s => s.kelas.trim() === c).length;
+                  return (
+                    <option key={c} value={c}>
+                      Kelas {c} ({count} Siswa)
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Dropdown 2: Kolom Nama Siswa */}
+            <div className="space-y-1">
+              <label className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Kolom Nama Siswa (Dropdown)</label>
+              <select
+                value={selectedNis}
+                onChange={(e) => {
+                  const newNis = e.target.value;
+                  setSelectedNis(newNis);
+                  if (newNis) {
+                    const st = siswa.find(s => s.nis === newNis);
+                    if (st) {
+                      setSelectedClass(st.kelas.trim());
+                      setSearchSiswaQuery(`${st.nama} (${st.kelas})`);
+                    }
+                  } else {
+                    setSearchSiswaQuery('');
+                  }
+                }}
+                className="w-full px-3 py-2 bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none text-xs text-slate-800 font-bold cursor-pointer"
+              >
+                <option value="">
+                  {selectedClass
+                    ? `-- Pilih Nama Siswa Kelas ${selectedClass} (${classFilteredSiswa.length} Siswa) --`
+                    : `-- Pilih Nama Siswa (${classFilteredSiswa.length} Siswa) --`}
+                </option>
+                {classFilteredSiswa.map(s => (
+                  <option key={s.id || s.nis} value={s.nis}>
+                    {s.nama} (NIS: {s.nis}) - Kelas {s.kelas}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Instant Search Bar */}
+            <div className="space-y-1 relative pt-1">
+              <label className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Atau Cari Langsung (Ketik Nama/NIS/Kelas)</label>
+              <div className="relative">
+                <input
+                  id="siswa-selector-input"
+                  type="text"
+                  placeholder={selectedStudentObj ? `${selectedStudentObj.nama} (Kelas ${selectedStudentObj.kelas})` : "Ketik nama, NIS, atau kelas siswa..."}
+                  value={searchSiswaQuery}
+                  onFocus={() => setIsSiswaDropdownOpen(true)}
+                  onChange={(e) => {
+                    setSearchSiswaQuery(e.target.value);
+                    setIsSiswaDropdownOpen(true);
+                    if (selectedNis) setSelectedNis('');
+                  }}
+                  className={`w-full px-4 py-2 text-xs bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none transition-all ${selectedStudentObj ? 'border-emerald-300 bg-emerald-50/10 font-bold text-slate-900' : ''}`}
+                />
+                {selectedStudentObj && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedNis('');
+                      setSearchSiswaQuery('');
+                    }}
+                    className="absolute right-2.5 top-1.5 text-[10px] text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded-md font-bold"
+                  >
+                    Ganti
+                  </button>
                 )}
               </div>
-            )}
+
+              {/* Dropdown list for typed search */}
+              {isSiswaDropdownOpen && !selectedNis && (
+                <div className="absolute left-0 right-0 top-full mt-1.5 z-40 max-h-56 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-50">
+                  {filteredSiswaList.length === 0 ? (
+                    <div className="p-3 text-center text-slate-400 italic text-xs">
+                      Siswa tidak ditemukan. Silakan cek nama atau NIS kembali.
+                    </div>
+                  ) : (
+                    filteredSiswaList.map(s => (
+                      <div
+                        key={s.id}
+                        onClick={() => {
+                          setSelectedNis(s.nis);
+                          setSelectedClass(s.kelas.trim());
+                          setSearchSiswaQuery(`${s.nama} (${s.kelas})`);
+                          setIsSiswaDropdownOpen(false);
+                        }}
+                        className="p-2.5 hover:bg-blue-50/50 cursor-pointer text-xs flex justify-between items-center transition-colors"
+                      >
+                        <div>
+                          <span className="font-bold text-slate-900 block">{s.nama}</span>
+                          <span className="text-slate-400 font-mono text-[10px]">NIS: {s.nis}</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded font-mono font-bold bg-slate-100 text-slate-600 text-[10px]">
+                          Kelas {s.kelas}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 2. SELECT VIOLATION */}

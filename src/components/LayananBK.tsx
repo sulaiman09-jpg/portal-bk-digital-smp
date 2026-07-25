@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   BookOpen, 
   User, 
@@ -19,7 +19,8 @@ import {
   Search,
   X,
   ChevronDown,
-  GraduationCap
+  GraduationCap,
+  Filter
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { 
@@ -229,6 +230,176 @@ function SearchableSiswaSelect({ students, selectedValue, onChange, placeholder 
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+interface SiswaClassSearchSelectProps {
+  students: Siswa[];
+  selectedValue: string;
+  onChange: (nis: string) => void;
+  placeholder?: string;
+  labelKelas?: string;
+  labelSiswa?: string;
+}
+
+function SiswaClassSearchSelect({
+  students,
+  selectedValue,
+  onChange,
+  placeholder = "Cari nama atau NIS siswa...",
+  labelKelas = "Kolom Kelas (Dropdown)",
+  labelSiswa = "Kolom Nama Siswa (Dropdown)"
+}: SiswaClassSearchSelectProps) {
+  const selectedStudent = students.find(s => s.nis === selectedValue);
+  
+  // State for selected class dropdown
+  const [selectedClass, setSelectedClass] = useState<string>(selectedStudent?.kelas || '');
+
+  // Keep selectedClass in sync when selectedValue changes externally or is selected from search
+  useEffect(() => {
+    if (selectedStudent) {
+      setSelectedClass(selectedStudent.kelas);
+    }
+  }, [selectedValue, selectedStudent]);
+
+  // Extract unique sorted classes for current school
+  const availableClasses = useMemo(() => {
+    const classSet = new Set<string>();
+    students.forEach(s => {
+      if (s.kelas && s.kelas.trim()) {
+        classSet.add(s.kelas.trim());
+      }
+    });
+    return Array.from(classSet).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+    );
+  }, [students]);
+
+  // Filter students by selected class
+  const filteredStudents = useMemo(() => {
+    if (!selectedClass) return students;
+    return students.filter(s => s.kelas.trim().toLowerCase() === selectedClass.trim().toLowerCase());
+  }, [students, selectedClass]);
+
+  // Handle class dropdown change
+  const handleClassChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newClass = e.target.value;
+    setSelectedClass(newClass);
+    
+    // If a student is currently selected, check if they exist in the new class. If not, reset student selection
+    if (selectedValue) {
+      const st = students.find(s => s.nis === selectedValue);
+      if (st && newClass && st.kelas.trim().toLowerCase() !== newClass.trim().toLowerCase()) {
+        onChange('');
+      }
+    }
+  };
+
+  // Handle student dropdown change
+  const handleStudentSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newNis = e.target.value;
+    onChange(newNis);
+    if (newNis) {
+      const st = students.find(s => s.nis === newNis);
+      if (st && st.kelas) {
+        setSelectedClass(st.kelas.trim());
+      }
+    }
+  };
+
+  return (
+    <div className="space-y-3 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs transition-all">
+      {/* 1. Kolom Kelas (Format Dropdown) */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] text-slate-600 font-extrabold uppercase tracking-wider block flex items-center gap-1">
+            <Filter className="w-3 h-3 text-indigo-600" />
+            {labelKelas} *
+          </label>
+          <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100 font-mono">
+            {selectedClass ? `Kelas ${selectedClass} (${filteredStudents.length} Siswa)` : `Semua Kelas (${students.length} Siswa)`}
+          </span>
+        </div>
+        <div className="relative flex items-center">
+          <select
+            value={selectedClass}
+            onChange={handleClassChange}
+            className="w-full pl-3 pr-8 py-2 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-xs text-slate-800 cursor-pointer shadow-2xs transition-all"
+          >
+            <option value="">-- Semua Kelas ({students.length} Siswa) --</option>
+            {availableClasses.map(c => {
+              const count = students.filter(s => s.kelas.trim() === c.trim()).length;
+              return (
+                <option key={c} value={c}>
+                  Kelas {c} ({count} Siswa)
+                </option>
+              );
+            })}
+          </select>
+          <ChevronDown className="absolute right-3 top-2.5 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+        </div>
+      </div>
+
+      {/* 2. Kolom Nama Siswa (Format Dropdown) */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] text-slate-600 font-extrabold uppercase tracking-wider block flex items-center gap-1">
+            <GraduationCap className="w-3 h-3 text-indigo-600" />
+            {labelSiswa} *
+          </label>
+          {selectedStudent && (
+            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100 font-mono">
+              ✓ {selectedStudent.nama} ({selectedStudent.kelas})
+            </span>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          {/* Main Dropdown Select for Nama Siswa */}
+          <div className="relative flex items-center">
+            <select
+              value={selectedValue}
+              onChange={handleStudentSelectChange}
+              className={`w-full pl-3 pr-8 py-2 bg-white border border-slate-200 focus:border-indigo-500 rounded-xl outline-none font-bold text-xs text-slate-800 cursor-pointer shadow-2xs transition-all ${
+                selectedValue ? 'border-indigo-400 bg-indigo-50/20 text-indigo-950 font-black' : ''
+              }`}
+            >
+              <option value="">
+                {selectedClass
+                  ? `-- Pilih Nama Siswa Kelas ${selectedClass} (${filteredStudents.length} Siswa) --`
+                  : `-- Pilih Nama Siswa (${filteredStudents.length} Siswa) --`}
+              </option>
+              {filteredStudents.map(s => (
+                <option key={s.id || s.nis} value={s.nis}>
+                  {s.nama} (NIS: {s.nis}) - Kelas {s.kelas}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-2.5 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+          </div>
+
+          {/* Searchable Student Select Component as quick search typing filter */}
+          <SearchableSiswaSelect
+            students={filteredStudents}
+            selectedValue={selectedValue}
+            onChange={(nis) => {
+              onChange(nis);
+              if (nis) {
+                const st = students.find(s => s.nis === nis);
+                if (st && st.kelas) {
+                  setSelectedClass(st.kelas.trim());
+                }
+              }
+            }}
+            placeholder={
+              selectedClass
+                ? `Cari nama/NIS di Kelas ${selectedClass}...`
+                : placeholder
+            }
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -1703,14 +1874,15 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                 </div>
 
                 <form onSubmit={handleAddKonseling} className="space-y-4 text-xs font-semibold text-slate-700">
-                  {/* Student dropdown */}
+                  {/* Student dropdown with Class dropdown sync */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-slate-400 uppercase block">Nama Siswa / Murid *</label>
-                    <SearchableSiswaSelect
+                    <SiswaClassSearchSelect
                       students={schoolStudents}
                       selectedValue={formKonseling.nis}
                       onChange={(nis) => setFormKonseling(prev => ({ ...prev, nis }))}
-                      placeholder="Cari siswa kesiswaan..."
+                      placeholder="Cari atau pilih nama siswa..."
+                      labelKelas="Kolom Kelas (Dropdown)"
+                      labelSiswa="Kolom Nama Siswa (Dropdown)"
                     />
                     <input type="hidden" name="konseling_siswa_nis" value={formKonseling.nis} required />
                   </div>
@@ -1912,14 +2084,15 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                 </div>
 
                 <form onSubmit={handleAddAsesmen} className="space-y-4 text-xs font-semibold text-slate-700">
-                  {/* Student */}
+                  {/* Student with Class dropdown sync */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-slate-400 uppercase block">Nama Siswa *</label>
-                    <SearchableSiswaSelect
+                    <SiswaClassSearchSelect
                       students={schoolStudents}
                       selectedValue={formAsesmen.nis}
                       onChange={(nis) => setFormAsesmen(prev => ({ ...prev, nis }))}
-                      placeholder="Cari siswa kesiswaan..."
+                      placeholder="Cari atau pilih nama siswa..."
+                      labelKelas="Kolom Kelas (Dropdown)"
+                      labelSiswa="Kolom Nama Siswa (Dropdown)"
                     />
                     <input type="hidden" name="asesmen_siswa_nis" value={formAsesmen.nis} required />
                   </div>
@@ -2072,14 +2245,15 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                 </div>
 
                 <form onSubmit={handleAddKunjungan} className="space-y-4 text-xs font-semibold text-slate-700 text-left">
-                  {/* Student */}
+                  {/* Student with Class dropdown sync */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-slate-400 uppercase block">Siswa Dikunjungi *</label>
-                    <SearchableSiswaSelect
+                    <SiswaClassSearchSelect
                       students={schoolStudents}
                       selectedValue={formKunjungan.nis}
                       onChange={(nis) => setFormKunjungan(prev => ({ ...prev, nis }))}
-                      placeholder="Cari siswa dikunjungi..."
+                      placeholder="Cari atau pilih nama siswa..."
+                      labelKelas="Kolom Kelas (Dropdown)"
+                      labelSiswa="Kolom Nama Siswa (Dropdown)"
                     />
                     <input type="hidden" name="kunjungan_siswa_nis" value={formKunjungan.nis} required />
                   </div>
@@ -2291,14 +2465,15 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
 
                 <form onSubmit={handleAddKehadiran} className="space-y-4 text-xs font-semibold text-slate-700">
                   
-                  {/* Student */}
+                  {/* Student with Class dropdown sync */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-slate-400 uppercase block">Nama Siswa *</label>
-                    <SearchableSiswaSelect
+                    <SiswaClassSearchSelect
                       students={schoolStudents}
                       selectedValue={formKehadiran.nis}
                       onChange={(nis) => setFormKehadiran(prev => ({ ...prev, nis }))}
-                      placeholder="Cari siswa..."
+                      placeholder="Cari atau pilih nama siswa..."
+                      labelKelas="Kolom Kelas (Dropdown)"
+                      labelSiswa="Kolom Nama Siswa (Dropdown)"
                     />
                     <input type="hidden" name="kehadiran_siswa_nis" value={formKehadiran.nis} required />
                   </div>
@@ -2604,14 +2779,15 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
 
                 <form onSubmit={(e) => { e.preventDefault(); handleGenerateLetter(); }} className="space-y-4 text-xs font-semibold text-slate-700">
                   
-                  {/* Siswa */}
+                  {/* Siswa with Class dropdown sync */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-slate-400 uppercase block">Nama Siswa / Murid *</label>
-                    <SearchableSiswaSelect
+                    <SiswaClassSearchSelect
                       students={schoolStudents}
                       selectedValue={formSurat.nis}
                       onChange={(nis) => setFormSurat(prev => ({ ...prev, nis }))}
-                      placeholder="Cari siswa..."
+                      placeholder="Cari atau pilih nama siswa..."
+                      labelKelas="Kolom Kelas (Dropdown)"
+                      labelSiswa="Kolom Nama Siswa (Dropdown)"
                     />
                     <input type="hidden" name="surat_siswa_nis" value={formSurat.nis} required />
                   </div>
@@ -2785,14 +2961,15 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                 </div>
 
                 <form onSubmit={handleAddSnbp} className="space-y-4 text-xs font-semibold text-slate-700">
-                  {/* Student Search Dropdown */}
+                  {/* Student Search Dropdown with Class dropdown sync */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] text-slate-400 uppercase block">Nama Siswa / Murid (Dropdown Search) *</label>
-                    <SearchableSiswaSelect
+                    <SiswaClassSearchSelect
                       students={schoolStudents}
                       selectedValue={formSnbp.nis}
                       onChange={(nis) => setFormSnbp(prev => ({ ...prev, nis }))}
-                      placeholder="Cari & pilih nama siswa..."
+                      placeholder="Cari atau pilih nama siswa..."
+                      labelKelas="Kolom Kelas (Dropdown)"
+                      labelSiswa="Kolom Nama Siswa (Dropdown)"
                     />
                     <input type="hidden" name="snbp_siswa_nis" value={formSnbp.nis} required />
                   </div>

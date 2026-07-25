@@ -277,6 +277,7 @@ export default function RuangKelas({
   const [petugas, setPetugas] = useState(currentUser.nama || '');
   const [keterangan, setKeterangan] = useState('');
   const [recordFoto, setRecordFoto] = useState('');
+  const [recordClassFilter, setRecordClassFilter] = useState('');
   const [searchSiswaQuery, setSearchSiswaQuery] = useState('');
   const [isSiswaDropdownOpen, setIsSiswaDropdownOpen] = useState(false);
   const [recordSuccess, setRecordSuccess] = useState(false);
@@ -285,6 +286,7 @@ export default function RuangKelas({
 
   // Remisi Poin states
   const [remisiNis, setRemisiNis] = useState('');
+  const [remisiClassFilter, setRemisiClassFilter] = useState('');
   const [remisiPoin, setRemisiPoin] = useState(10);
   const [remisiTanggal, setRemisiTanggal] = useState(new Date().toISOString().split('T')[0]);
   const [remisiPetugas, setRemisiPetugas] = useState(currentUser.nama || '');
@@ -321,8 +323,13 @@ export default function RuangKelas({
 
   const selectedRemisiStudentObj = classStudents.find(s => s.nis === remisiNis);
 
+  const availableClassStudentsClasses = Array.from(
+    new Set(classStudents.map(s => s.kelas).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+
   const filteredStudentsDropdown = classStudents
     .filter(s => {
+      if (recordClassFilter && s.kelas.trim().toLowerCase() !== recordClassFilter.trim().toLowerCase()) return false;
       if (!searchSiswaQuery.trim()) return true;
       const q = searchSiswaQuery.toLowerCase().trim();
       return (
@@ -343,6 +350,7 @@ export default function RuangKelas({
 
   const filteredRemisiStudentsDropdown = classStudents
     .filter(s => {
+      if (remisiClassFilter && s.kelas.trim().toLowerCase() !== remisiClassFilter.trim().toLowerCase()) return false;
       if (!searchRemisiSiswaQuery.trim()) return true;
       const q = searchRemisiSiswaQuery.toLowerCase().trim();
       return (
@@ -970,6 +978,66 @@ export default function RuangKelas({
 
               <form onSubmit={handleRecordSubmit} className="space-y-4 text-xs font-semibold">
                 
+                {/* Class Filter Dropdown */}
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Kolom Kelas (Dropdown)</label>
+                  <select
+                    value={recordClassFilter}
+                    onChange={(e) => {
+                      const newClass = e.target.value;
+                      setRecordClassFilter(newClass);
+                      if (selectedNis) {
+                        const st = classStudents.find(s => s.nis === selectedNis);
+                        if (st && newClass && st.kelas !== newClass) {
+                          setSelectedNis('');
+                        }
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-indigo-500 rounded-xl outline-none text-xs text-slate-800 font-bold transition-all cursor-pointer"
+                  >
+                    <option value="">-- Semua Kelas ({classStudents.length} Siswa) --</option>
+                    {availableClassStudentsClasses.map(c => {
+                      const count = classStudents.filter(s => s.kelas === c).length;
+                      return (
+                        <option key={c} value={c}>
+                          Kelas {c} ({count} Siswa)
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* Student Name Dropdown */}
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Kolom Nama Siswa (Dropdown) *</label>
+                  <select
+                    value={selectedNis}
+                    onChange={(e) => {
+                      const newNis = e.target.value;
+                      setSelectedNis(newNis);
+                      if (newNis) {
+                        const st = classStudents.find(s => s.nis === newNis);
+                        if (st) {
+                          setRecordClassFilter(st.kelas);
+                          setSearchSiswaQuery('');
+                        }
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-indigo-500 rounded-xl outline-none text-xs text-slate-800 font-bold transition-all cursor-pointer"
+                  >
+                    <option value="">
+                      {recordClassFilter 
+                        ? `-- Pilih Nama Siswa Kelas ${recordClassFilter} (${filteredStudentsDropdown.length} Siswa) --`
+                        : `-- Pilih Nama Siswa (${filteredStudentsDropdown.length} Siswa) --`}
+                    </option>
+                    {filteredStudentsDropdown.map(s => (
+                      <option key={s.id || s.nis} value={s.nis}>
+                        {s.nama} (NIS: {s.nis}) - Kelas {s.kelas}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Search & Select Student Dropdown */}
                 <div className="space-y-1 relative">
                   <label className="text-[10px] text-slate-500 uppercase tracking-wider block">Cari & Pilih Siswa *</label>
@@ -1185,6 +1253,66 @@ export default function RuangKelas({
 
               <form onSubmit={handleRemisiSubmit} className="space-y-4 text-xs font-semibold">
                 
+                {/* Class Filter Dropdown for Remission */}
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Kolom Kelas (Dropdown)</label>
+                  <select
+                    value={remisiClassFilter}
+                    onChange={(e) => {
+                      const newClass = e.target.value;
+                      setRemisiClassFilter(newClass);
+                      if (remisiNis) {
+                        const st = classStudents.find(s => s.nis === remisiNis);
+                        if (st && newClass && st.kelas !== newClass) {
+                          setRemisiNis('');
+                        }
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-xl outline-none text-xs text-slate-800 font-bold transition-all cursor-pointer"
+                  >
+                    <option value="">-- Semua Kelas ({classStudents.length} Siswa) --</option>
+                    {availableClassStudentsClasses.map(c => {
+                      const count = classStudents.filter(s => s.kelas === c).length;
+                      return (
+                        <option key={c} value={c}>
+                          Kelas {c} ({count} Siswa)
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* Student Name Dropdown for Remission */}
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Kolom Nama Siswa (Dropdown) *</label>
+                  <select
+                    value={remisiNis}
+                    onChange={(e) => {
+                      const newNis = e.target.value;
+                      setRemisiNis(newNis);
+                      if (newNis) {
+                        const st = classStudents.find(s => s.nis === newNis);
+                        if (st) {
+                          setRemisiClassFilter(st.kelas);
+                          setSearchRemisiSiswaQuery('');
+                        }
+                      }
+                    }}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 focus:border-emerald-500 rounded-xl outline-none text-xs text-slate-800 font-bold transition-all cursor-pointer"
+                  >
+                    <option value="">
+                      {remisiClassFilter 
+                        ? `-- Pilih Nama Siswa Kelas ${remisiClassFilter} (${filteredRemisiStudentsDropdown.length} Siswa) --`
+                        : `-- Pilih Nama Siswa (${filteredRemisiStudentsDropdown.length} Siswa) --`}
+                    </option>
+                    {filteredRemisiStudentsDropdown.map(s => (
+                      <option key={s.id || s.nis} value={s.nis}>
+                        {s.nama} (NIS: {s.nis}) - Kelas {s.kelas}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Search & Select Student Dropdown for Remission */}
                 <div className="space-y-1 relative">
                   <label className="text-[10px] text-slate-500 uppercase tracking-wider block">Cari & Pilih Penerima Remisi *</label>

@@ -13,9 +13,14 @@ interface SiswaListProps {
 
 export default function SiswaList({ siswa, pencatatan, userRole, onAddStudent, onDeleteStudent }: SiswaListProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedClassFilter, setSelectedClassFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedSiswaForCard, setSelectedSiswaForCard] = useState<Siswa | null>(null);
   const itemsPerPage = 8;
+
+  const availableClasses = Array.from(
+    new Set(siswa.map(s => s.kelas.trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
   // Modal form states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -55,6 +60,9 @@ export default function SiswaList({ siswa, pencatatan, userRole, onAddStudent, o
   // 1. Filter and search
   const filteredStudents = siswa
     .filter(student => {
+      if (selectedClassFilter && student.kelas.trim().toLowerCase() !== selectedClassFilter.trim().toLowerCase()) {
+        return false;
+      }
       if (!searchTerm.trim()) return true;
       const q = searchTerm.toLowerCase().trim();
       return (
@@ -194,19 +202,41 @@ export default function SiswaList({ siswa, pencatatan, userRole, onAddStudent, o
           <p className="text-xs text-slate-500">Kelola informasi data diri, kelas, dan nomor kontak orang tua siswa</p>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-3 top-2.5 h-4.5 w-4.5 text-slate-400" />
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          {/* Class Dropdown Filter */}
+          <div className="min-w-[160px]">
+            <select
+              value={selectedClassFilter}
+              onChange={(e) => {
+                setSelectedClassFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl outline-none font-bold text-slate-700 cursor-pointer"
+            >
+              <option value="">-- Semua Kelas ({siswa.length}) --</option>
+              {availableClasses.map(c => {
+                const count = siswa.filter(s => s.kelas.trim() === c).length;
+                return (
+                  <option key={c} value={c}>
+                    Kelas {c} ({count} Siswa)
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          <div className="relative flex-1 sm:w-56">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
             <input
               id="search-siswa-input"
               type="text"
-              placeholder="Cari NIS, nama, kelas..."
+              placeholder="Cari NIS, nama..."
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className="pl-9 pr-4 py-2 w-full text-sm bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl outline-none transition-all"
+              className="pl-9 pr-4 py-2 w-full text-xs bg-slate-50 border border-slate-200 focus:border-blue-500 focus:bg-white rounded-xl outline-none transition-all font-medium"
             />
           </div>
 
