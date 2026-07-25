@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
+import dataStoreJson from '../data-store.json';
 
 // Inline database interfaces to make the Serverless Function completely self-contained and avoid import issues
 export interface Siswa {
@@ -175,46 +176,11 @@ const preDefinedUsers: PreDefinedUser[] = [
   { username: 'nurma', password: 'nurma123', nama: 'Nurma, S.Pd', role: 'Guru BK' }
 ];
 
-// Default initial data for simulation
-const initialSiswa: Siswa[] = [
-  { id: 'S001', nis: '21001', nama: 'Ahmad Fauzi', kelas: '9-A', jk: 'L', namaOrangTua: 'Budi Fauzi', noHp: '081234567890' },
-  { id: 'S002', nis: '21002', nama: 'Siti Nurhaliza', kelas: '9-A', jk: 'P', namaOrangTua: 'Nurhalim', noHp: '081345678901' },
-  { id: 'S003', nis: '21003', nama: 'Rizky Ramadhan', kelas: '8-B', jk: 'L', namaOrangTua: 'Ramadhan', noHp: '081987654321' },
-  { id: 'S004', nis: '21004', nama: 'Chelsea Olivia', kelas: '8-B', jk: 'P', namaOrangTua: 'Hendra', noHp: '081222333444' },
-  { id: 'S005', nis: '21005', nama: 'Muhammad Yusuf', kelas: '7-A', jk: 'L', namaOrangTua: 'Yusuf Ibrahim', noHp: '085711122233' },
-  { id: 'S006', nis: '21006', nama: 'Amanda Manopo', kelas: '7-C', jk: 'P', namaOrangTua: 'Denny', noHp: '087812345678' },
-  { id: 'S007', nis: '21007', nama: 'Budi Santoso', kelas: '9-B', jk: 'L', namaOrangTua: 'Joko Santoso', noHp: '085299998888' },
-  { id: 'S008', nis: '21008', nama: 'Dewi Lestari', kelas: '8-A', jk: 'P', namaOrangTua: 'Adi Lestari', noHp: '081122334455' }
-];
-
-const initialPelanggaran: Pelanggaran[] = [
-  { id: 'P001', kode: 'PK01', namaPelanggaran: 'Terlambat masuk sekolah', kategori: 'Ringan', poin: 5 },
-  { id: 'P002', kode: 'PK02', namaPelanggaran: 'Tidak memakai atribut seragam lengkap (topi, dasi, ikat pinggang)', kategori: 'Ringan', poin: 5 },
-  { id: 'P003', kode: 'PK03', namaPelanggaran: 'Membawa HP/Gadget tanpa izin guru', kategori: 'Ringan', poin: 10 },
-  { id: 'P004', kode: 'PK04', namaPelanggaran: 'Rambut gondrong atau tidak rapi (siswa laki-laki)', kategori: 'Ringan', poin: 10 },
-  { id: 'P005', kode: 'PS01', namaPelanggaran: 'Membolos saat jam pelajaran', kategori: 'Sedang', poin: 20 },
-  { id: 'P006', kode: 'PS02', namaPelanggaran: 'Keluar lingkungan sekolah tanpa izin', kategori: 'Sedang', poin: 20 },
-  { id: 'P007', kode: 'PS03', namaPelanggaran: 'Berpakaian tidak sopan / mencoret-coret seragam', kategori: 'Sedang', poin: 15 },
-  { id: 'P008', kode: 'PB01', namaPelanggaran: 'Merokok atau membawa rokok di sekolah', kategori: 'Berat', poin: 50 },
-  { id: 'P009', kode: 'PB02', namaPelanggaran: 'Merusak sarana dan prasarana sekolah secara sengaja', kategori: 'Berat', poin: 50 },
-  { id: 'P010', kode: 'PB03', namaPelanggaran: 'Terlibat dalam perkelahian atau tawuran', kategori: 'Berat', poin: 75 },
-  { id: 'P011', kode: 'PB04', namaPelanggaran: 'Mencuri barang milik orang lain atau milik sekolah', kategori: 'Berat', poin: 75 },
-  { id: 'P012', kode: 'PB05', namaPelanggaran: 'Membawa senjata tajam, narkoba, atau minuman keras', kategori: 'Berat', poin: 100 }
-];
-
-const initialPencatatan: Pencatatan[] = [
-  { id: 'R001', tanggal: '2026-06-10', nis: '21007', namaSiswa: 'Budi Santoso', kelas: '9-B', pelanggaran: 'Terlambat masuk sekolah', poin: 5, petugas: 'Sulaiman, S.Psi.', keterangan: 'Kesiangan karena macet' },
-  { id: 'R002', tanggal: '2026-06-15', nis: '21007', namaSiswa: 'Budi Santoso', kelas: '9-B', pelanggaran: 'Rambut gondrong atau tidak rapi (siswa laki-laki)', poin: 10, petugas: 'Sulaiman, S.Psi.', keterangan: 'Rambut bagian belakang menyentuh kerah' },
-  { id: 'R003', tanggal: '2026-06-20', nis: '21007', namaSiswa: 'Budi Santoso', kelas: '9-B', pelanggaran: 'Membolos saat jam pelajaran', poin: 20, petugas: 'No Name', keterangan: 'Nongkrong di kantin saat jam matematika' },
-  { id: 'R004', tanggal: '2026-06-24', nis: '21003', namaSiswa: 'Rizky Ramadhan', kelas: '8-B', pelanggaran: 'Tidak memakai atribut seragam lengkap (topi, dasi, ikat pinggang)', poin: 5, petugas: 'Sulaiman, S.Psi.', keterangan: 'Tidak pakai dasi saat upacara bendera' },
-  { id: 'R005', tanggal: '2026-06-01', nis: '21001', namaSiswa: 'Ahmad Fauzi', kelas: '9-A', pelanggaran: 'Terlibat dalam perkelahian atau tawuran', poin: 75, petugas: 'Iien Puspitasari, S.Pd', keterangan: 'Tawuran di luar gerbang sekolah' },
-  { id: 'R006', tanggal: '2026-06-12', nis: '21001', namaSiswa: 'Ahmad Fauzi', kelas: '9-A', pelanggaran: 'Merokok atau membawa rokok di sekolah', poin: 50, petugas: 'Sulaiman, S.Psi.', keterangan: 'Ketahuan merokok di toilet belakang' }
-];
-
-const initialPembinaan: Pembinaan[] = [
-  { id: 'B001', nis: '21007', namaSiswa: 'Budi Santoso', totalPoin: 35, tindakan: 'Teguran Tertulis', tanggal: '2026-06-20' },
-  { id: 'B002', nis: '21001', namaSiswa: 'Ahmad Fauzi', totalPoin: 125, tindakan: 'Sidang Disiplin', tanggal: '2026-06-12' }
-];
+// Default initial data for simulation loaded directly from data-store.json
+const initialSiswa: Siswa[] = (dataStoreJson.siswa || []) as Siswa[];
+const initialPelanggaran: Pelanggaran[] = (dataStoreJson.pelanggaran || []) as Pelanggaran[];
+const initialPencatatan: Pencatatan[] = (dataStoreJson.pencatatan || []) as Pencatatan[];
+const initialPembinaan: Pembinaan[] = (dataStoreJson.pembinaan || []) as Pembinaan[];
 
 interface DBStructure {
   siswa: Siswa[];
@@ -225,26 +191,23 @@ interface DBStructure {
 
 // Sanitize and deduplicate database to prevent any duplicate students or records
 function sanitizeAndDeduplicate(db: DBStructure): DBStructure {
-  // 1. Filter students: deduplicate by NIS and name
+  // 1. Filter students: deduplicate strictly by NIS
   const uniqueSiswa: Siswa[] = [];
   const seenNIS = new Set<string>();
-  const seenNames = new Set<string>();
 
   (db.siswa || []).forEach(s => {
     if (!s) return;
     const cleanNis = String(s.nis || '').trim();
     const cleanName = String(s.nama || '').trim();
-    const cleanNameLower = cleanName.toLowerCase();
 
     if (!cleanNis || !cleanName) return;
 
-    // Skip duplicates
-    if (seenNIS.has(cleanNis) || seenNames.has(cleanNameLower)) {
+    // Skip duplicate NIS
+    if (seenNIS.has(cleanNis)) {
       return;
     }
 
     seenNIS.add(cleanNis);
-    seenNames.add(cleanNameLower);
 
     uniqueSiswa.push({
       ...s,
@@ -749,16 +712,16 @@ apiRouter.get('/data', async (req, res) => {
         ]);
 
         if (studentRes.success && violationRes.success && recordRes.success) {
-          const newDb: DBStructure = {
-            siswa: studentRes.data || [],
-            pelanggaran: violationRes.data || [],
-            pencatatan: recordRes.data?.pencatatan || [],
-            pembinaan: recordRes.data?.pembinaan || []
+          const rawMergedDb: DBStructure = {
+            siswa: [...(db.siswa || []), ...(studentRes.data || [])],
+            pelanggaran: [...(db.pelanggaran || []), ...(violationRes.data || [])],
+            pencatatan: [...(db.pencatatan || []), ...(recordRes.data?.pencatatan || [])],
+            pembinaan: [...(db.pembinaan || []), ...(recordRes.data?.pembinaan || [])]
           };
-          const sanitized = sanitizeAndDeduplicate(newDb);
+          const sanitized = sanitizeAndDeduplicate(rawMergedDb);
           writeDB(sanitized);
           db = sanitized;
-          console.log('[Auto-Sync] Berhasil memperbarui database lokal secara sinkron.');
+          console.log('[Auto-Sync] Berhasil memperbarui dan menggabungkan database lokal secara sinkron.');
         }
       } catch (err: any) {
         console.warn('[Auto-Sync Alert] Gagal menyelaraskan otomatis:', err.message);

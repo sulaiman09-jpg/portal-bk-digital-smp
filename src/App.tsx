@@ -9,7 +9,8 @@ import RiwayatSiswaDetail from './components/RiwayatSiswaDetail';
 import LaporanSiswa from './components/LaporanSiswa';
 import PeringkatLeaderboard from './components/PeringkatLeaderboard';
 import SetupPanduan from './components/SetupPanduan';
-import RuangKelas, { belongsToSchool } from './components/RuangKelas';
+import RuangKelas from './components/RuangKelas';
+import { belongsToSchool } from './utils/schoolUtils';
 
 // Helper to determine if a school/class tab is accessible by a user
 function isTabAccessible(tabId: string, user: User | null): boolean {
