@@ -2,7 +2,6 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
-import dataStoreJson from '../data-store.json';
 
 // Inline database interfaces to make the Serverless Function completely self-contained and avoid import issues
 export interface Siswa {
@@ -87,43 +86,34 @@ app.use((req, res, next) => {
   const originalUrl = req.url;
   console.log(`[Express API] Incoming: ${req.method} ${originalUrl}`);
 
-  // 1. Check for original URL headers set by Vercel or proxies as a fallback
-  const originalUrlHeader = req.headers['x-original-url'] as string;
-  const forwardedUrlHeader = req.headers['x-forwarded-url'] as string;
-  
-  let targetUrl = '';
-  if (originalUrlHeader && originalUrlHeader.startsWith('/api')) {
-    targetUrl = originalUrlHeader;
-  } else if (forwardedUrlHeader && forwardedUrlHeader.startsWith('/api')) {
-    targetUrl = forwardedUrlHeader;
-  }
-
-  if (targetUrl) {
-    console.log(`[Express API] Resolving req.url from header to: ${targetUrl}`);
-    req.url = targetUrl;
-  } else if (req.query && req.query.path) {
-    // 2. Query path parameter fallback (forwarded from vercel.json)
-    // Handle query path safely if it is an array or string
+  // 1. Handle query path forwarded by vercel.json rewrite rule (?path=$1)
+  if (req.query && req.query.path) {
     const rawPath = req.query.path;
     const subPath = Array.isArray(rawPath) ? rawPath.join('/') : String(rawPath);
     const cleanSubPath = subPath.replace(/^\/+|\/+$/g, '');
-    
+
     const queryCopy = { ...req.query };
     delete queryCopy.path;
     const queryKeys = Object.keys(queryCopy);
     const queryString = queryKeys.length > 0
       ? '?' + queryKeys.map(k => `${k}=${encodeURIComponent(String(queryCopy[k]))}`).join('&')
       : '';
-      
+
     req.url = `/api/${cleanSubPath}${queryString}`;
-    console.log(`[Express API] Resolving req.url from query path to: ${req.url}`);
-  } else {
-    // 3. Fallback to clean literal "/api/index.ts" or "/api/index" if it was hit directly
-    if (req.url.startsWith('/api/index.ts')) {
-      req.url = req.url.replace('/api/index.ts', '/api');
-    } else if (req.url.startsWith('/api/index')) {
-      req.url = req.url.replace('/api/index', '/api');
-    }
+    console.log(`[Express API] Resolved req.url from query path to: ${req.url}`);
+  } else if (req.headers['x-forwarded-uri'] && (req.headers['x-forwarded-uri'] as string).startsWith('/api')) {
+    req.url = req.headers['x-forwarded-uri'] as string;
+  } else if (req.headers['x-original-url'] && (req.headers['x-original-url'] as string).startsWith('/api')) {
+    req.url = req.headers['x-original-url'] as string;
+  } else if (req.headers['x-forwarded-url'] && (req.headers['x-forwarded-url'] as string).startsWith('/api')) {
+    req.url = req.headers['x-forwarded-url'] as string;
+  }
+
+  // Clean trailing index references if present for API requests
+  if (req.url.startsWith('/api/index.ts')) {
+    req.url = req.url.replace(/\/api\/index\.ts\/?/, '/api/');
+  } else if (req.url.startsWith('/api/index')) {
+    req.url = req.url.replace(/\/api\/index\/?/, '/api/');
   }
 
   // Clean double slashes
@@ -176,11 +166,26 @@ const preDefinedUsers: PreDefinedUser[] = [
   { username: 'nurma', password: 'nurma123', nama: 'Nurma, S.Pd', role: 'Guru BK' }
 ];
 
-// Default initial data for simulation loaded directly from data-store.json
-const initialSiswa: Siswa[] = (dataStoreJson.siswa || []) as Siswa[];
-const initialPelanggaran: Pelanggaran[] = (dataStoreJson.pelanggaran || []) as Pelanggaran[];
-const initialPencatatan: Pencatatan[] = (dataStoreJson.pencatatan || []) as Pencatatan[];
-const initialPembinaan: Pembinaan[] = (dataStoreJson.pembinaan || []) as Pembinaan[];
+// Load default initial seed data directly from data-store.json via fs.readFileSync (safe for Vercel lambda runtime)
+let seedDbData: { siswa?: Siswa[]; pelanggaran?: Pelanggaran[]; pencatatan?: Pencatatan[]; pembinaan?: Pembinaan[] } = {};
+try {
+  const seedFile = path.join(process.cwd(), 'data-store.json');
+  if (fs.existsSync(seedFile)) {
+    seedDbData = JSON.parse(fs.readFileSync(seedFile, 'utf-8'));
+  } else {
+    const altSeedFile = path.resolve(__dirname, '..', 'data-store.json');
+    if (fs.existsSync(altSeedFile)) {
+      seedDbData = JSON.parse(fs.readFileSync(altSeedFile, 'utf-8'));
+    }
+  }
+} catch (e) {
+  console.warn('[Express API] Gagal membaca data-store.json seed:', e);
+}
+
+const initialSiswa: Siswa[] = seedDbData.siswa || [];
+const initialPelanggaran: Pelanggaran[] = seedDbData.pelanggaran || [];
+const initialPencatatan: Pencatatan[] = seedDbData.pencatatan || [];
+const initialPembinaan: Pembinaan[] = seedDbData.pembinaan || [];
 
 interface DBStructure {
   siswa: Siswa[];
