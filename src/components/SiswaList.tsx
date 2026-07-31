@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Siswa, Role, Pencatatan } from '../types';
 import { Search, UserPlus, Edit2, Trash2, X, AlertCircle, CreditCard } from 'lucide-react';
 import KartuKesiswaan from './KartuKesiswaan';
+import GenderDemographicsCard from './GenderDemographicsCard';
 
 interface SiswaListProps {
   siswa: Siswa[];
@@ -251,6 +252,13 @@ export default function SiswaList({ siswa, pencatatan, userRole, onAddStudent, o
           )}
         </div>
       </div>
+
+      {/* Gender Demographics Summary Bar */}
+      <GenderDemographicsCard
+        siswa={filteredStudents}
+        title={selectedClassFilter ? `Demografi Gender - Kelas ${selectedClassFilter}` : 'Statistik Demografi & Gender Siswa'}
+        showSchoolGrid={!selectedClassFilter}
+      />
 
       {/* Main Table */}
       <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-xs">

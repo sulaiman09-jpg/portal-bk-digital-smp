@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Siswa, Pelanggaran, Pencatatan, User } from '../types';
 import LayananBK from './LayananBK';
+import GenderDemographicsCard from './GenderDemographicsCard';
 import { 
   Search, 
   UserPlus, 
@@ -747,6 +748,14 @@ export default function RuangKelas({
           Ruang kontrol administrasi khusus untuk {classNameFilter}. Kelola daftar database siswa internal, catatkan laporan pelanggaran secara langsung, dan cetak lembaran sanksi formal dalam format PDF.
         </p>
       </div>
+
+      {/* Gender Demographics Stats Card for current School / Classroom */}
+      <GenderDemographicsCard
+        siswa={siswa}
+        schoolFilter={classNameFilter}
+        showSchoolGrid={false}
+        title={`Demografi Gender & Total Siswa (${classNameFilter})`}
+      />
 
       {/* Grid layouts: Two pillars */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

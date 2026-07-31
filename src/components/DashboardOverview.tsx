@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Siswa, Pelanggaran, Pencatatan, Pembinaan } from '../types';
 import StatCard from './StatCard';
+import GenderDemographicsCard from './GenderDemographicsCard';
 import { AlertTriangle, BookOpen, Clock, Calendar, ShieldCheck, ChevronRight } from 'lucide-react';
 
 interface DashboardOverviewProps {
@@ -213,6 +214,13 @@ export default function DashboardOverview({
           colorTheme="emerald"
         />
       </div>
+
+      {/* Gender Demographics & School Units Section */}
+      <GenderDemographicsCard
+        siswa={siswa}
+        showSchoolGrid={true}
+        title="Statistik Demografi & Gender Siswa - Yayasan Aldiana Nusantara"
+      />
 
       {/* Main Charts & Indicators */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
