@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { belongsToSchool } from '../utils/schoolUtils';
+import { googleSheetApi } from '../services/googleSheetApi';
 import { 
   BookOpen, 
   User, 
@@ -21,7 +22,9 @@ import {
   X,
   ChevronDown,
   GraduationCap,
-  Filter
+  Filter,
+  RefreshCw,
+  CheckCircle2
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { 
@@ -429,6 +432,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
   const [kehadiranList, setKehadiranList] = useState<KehadiranData[]>([]);
   const [snbpList, setSnbpList] = useState<SnbpData[]>([]);
   const [searchKehadiranQuery, setSearchKehadiranQuery] = useState('');
+  const [isSyncingKehadiran, setIsSyncingKehadiran] = useState(false);
 
   // Toast notifier
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -437,7 +441,24 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Load initial datasets from localStorage
+  // Function to refresh attendance from server/Google Sheets
+  const refreshKehadiranFromServer = async () => {
+    setIsSyncingKehadiran(true);
+    try {
+      const res = await googleSheetApi.getKehadiran();
+      if (res.success && Array.isArray(res.data)) {
+        const filtered = res.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setKehadiranList(filtered);
+        localStorage.setItem(`bk_kehadiran_${classNameFilter}`, JSON.stringify(filtered));
+      }
+    } catch (err) {
+      console.warn('Gagal memuat rekap kehadiran dari server/sheet:', err);
+    } finally {
+      setIsSyncingKehadiran(false);
+    }
+  };
+
+  // Load initial datasets from localStorage and server
   useEffect(() => {
     const storedKonseling = localStorage.getItem(`bk_konseling_${classNameFilter}`);
     const storedAsesmen = localStorage.getItem(`bk_asesmen_${classNameFilter}`);
@@ -459,6 +480,9 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
 
     if (storedSnbp) setSnbpList(JSON.parse(storedSnbp));
     else setSnbpList([]);
+
+    // Asynchronously fetch latest attendance from server / Google Sheets
+    refreshKehadiranFromServer();
 
     setSearchKehadiranQuery('');
 
@@ -939,7 +963,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
   ];
 
-  const handleAddKehadiran = (e: React.FormEvent) => {
+  const handleAddKehadiran = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formKehadiran.nis) {
       showLocalToast('Pilih siswa terlebih dahulu!', 'error');
@@ -962,11 +986,11 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     }
 
     const counts = {
-      hadir: formKehadiran.hadir,
-      sakit: formKehadiran.sakit,
-      izin: formKehadiran.izin,
-      alfa: formKehadiran.alfa,
-      jumlah: formKehadiran.hadir + formKehadiran.sakit + formKehadiran.izin + formKehadiran.alfa
+      hadir: Number(formKehadiran.hadir) || 0,
+      sakit: Number(formKehadiran.sakit) || 0,
+      izin: Number(formKehadiran.izin) || 0,
+      alfa: Number(formKehadiran.alfa) || 0,
+      jumlah: (Number(formKehadiran.hadir) || 0) + (Number(formKehadiran.sakit) || 0) + (Number(formKehadiran.izin) || 0) + (Number(formKehadiran.alfa) || 0)
     };
 
     const newKehadiran: KehadiranData = {
@@ -986,8 +1010,11 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
       keterangan: formKehadiran.keterangan
     };
 
-    saveKehadiran([newKehadiran, ...kehadiranList]);
-    showLocalToast('Rekap absensi mingguan siswa berhasil direkam.');
+    // Optimistic local state update
+    const updatedList = [newKehadiran, ...kehadiranList];
+    saveKehadiran(updatedList);
+    showLocalToast('Rekap absensi mingguan siswa tersimpan permanen & disinkronkan.');
+
     setFormKehadiran(prev => ({
       ...prev,
       nis: '',
@@ -997,12 +1024,35 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
       alfa: 0,
       keterangan: ''
     }));
+
+    // Persist to server / Google Sheets
+    try {
+      const res = await googleSheetApi.addKehadiran(newKehadiran);
+      if (res.success && Array.isArray(res.data)) {
+        const filtered = res.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setKehadiranList(filtered);
+        localStorage.setItem(`bk_kehadiran_${classNameFilter}`, JSON.stringify(filtered));
+      }
+    } catch (err) {
+      console.warn('Gagal sinkronisasi data kehadiran ke server:', err);
+    }
   };
 
-  const handleDeleteKehadiran = (id: string) => {
+  const handleDeleteKehadiran = async (id: string) => {
     const updated = kehadiranList.filter(item => item.id !== id);
     saveKehadiran(updated);
     showLocalToast('Rekap kehadiran berhasil dihapus.');
+
+    try {
+      const res = await googleSheetApi.deleteKehadiran(id);
+      if (res.success && Array.isArray(res.data)) {
+        const filtered = res.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setKehadiranList(filtered);
+        localStorage.setItem(`bk_kehadiran_${classNameFilter}`, JSON.stringify(filtered));
+      }
+    } catch (err) {
+      console.warn('Gagal menghapus data kehadiran di server:', err);
+    }
   };
 
   // --- Attendance Analytics Generation ---
@@ -2623,7 +2673,19 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                 {/* Absensi Table logs */}
                 <div className="space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100">
-                    <h3 className="font-extrabold text-slate-800 text-sm">Riwayat Rekapitulasi Presensi Mingguan</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-extrabold text-slate-800 text-sm">Riwayat Rekapitulasi Presensi Mingguan</h3>
+                      <button
+                        type="button"
+                        onClick={refreshKehadiranFromServer}
+                        disabled={isSyncingKehadiran}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-full transition-colors cursor-pointer"
+                        title="Sinkronkan dengan Google Sheets & Database"
+                      >
+                        <RefreshCw className={`w-3 h-3 text-emerald-600 ${isSyncingKehadiran ? 'animate-spin' : ''}`} />
+                        <span>{isSyncingKehadiran ? 'Sinkronisasi...' : 'Tersinkron Sheet'}</span>
+                      </button>
+                    </div>
                     
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="relative">

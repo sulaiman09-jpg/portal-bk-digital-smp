@@ -39,6 +39,23 @@ export interface Pembinaan {
   tanggal: string;
 }
 
+export interface KehadiranData {
+  id: string;
+  nis: string;
+  namaSiswa: string;
+  kelas: string;
+  mingguKe: string;
+  bulan: string;
+  tahun: string;
+  status?: 'Hadir' | 'Sakit' | 'Izin' | 'Alfa';
+  hadir?: number;
+  sakit?: number;
+  izin?: number;
+  alfa?: number;
+  jumlah?: number;
+  keterangan: string;
+}
+
 export type Role = 'Admin' | 'Guru BK' | 'Guru Piket';
 
 export interface User {

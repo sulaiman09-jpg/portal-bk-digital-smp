@@ -45,6 +45,23 @@ export interface Pembinaan {
   tanggal: string;
 }
 
+export interface KehadiranData {
+  id: string;
+  nis: string;
+  namaSiswa: string;
+  kelas: string;
+  mingguKe: string;
+  bulan: string;
+  tahun: string;
+  status?: 'Hadir' | 'Sakit' | 'Izin' | 'Alfa';
+  hadir?: number;
+  sakit?: number;
+  izin?: number;
+  alfa?: number;
+  jumlah?: number;
+  keterangan: string;
+}
+
 export type Role = 'Admin' | 'Guru BK' | 'Guru Piket';
 
 export interface User {
@@ -167,7 +184,7 @@ const preDefinedUsers: PreDefinedUser[] = [
 ];
 
 // Load default initial seed data directly from data-store.json via fs.readFileSync (safe for Vercel lambda runtime)
-let seedDbData: { siswa?: Siswa[]; pelanggaran?: Pelanggaran[]; pencatatan?: Pencatatan[]; pembinaan?: Pembinaan[] } = {};
+let seedDbData: { siswa?: Siswa[]; pelanggaran?: Pelanggaran[]; pencatatan?: Pencatatan[]; pembinaan?: Pembinaan[]; kehadiran?: KehadiranData[] } = {};
 try {
   const seedFile = path.join(process.cwd(), 'data-store.json');
   if (fs.existsSync(seedFile)) {
@@ -186,12 +203,14 @@ const initialSiswa: Siswa[] = seedDbData.siswa || [];
 const initialPelanggaran: Pelanggaran[] = seedDbData.pelanggaran || [];
 const initialPencatatan: Pencatatan[] = seedDbData.pencatatan || [];
 const initialPembinaan: Pembinaan[] = seedDbData.pembinaan || [];
+const initialKehadiran: KehadiranData[] = seedDbData.kehadiran || [];
 
 interface DBStructure {
   siswa: Siswa[];
   pelanggaran: Pelanggaran[];
   pencatatan: Pencatatan[];
   pembinaan: Pembinaan[];
+  kehadiran: KehadiranData[];
 }
 
 // Sanitize and deduplicate database to prevent any duplicate students or records
@@ -334,11 +353,65 @@ function sanitizeAndDeduplicate(db: DBStructure): DBStructure {
     }
   });
 
+  // 5. Filter attendance (Kehadiran): deduplicate by ID or composite key (NIS + mingguKe + bulan + tahun)
+  const uniqueKehadiran: KehadiranData[] = [];
+  const seenKehadiranIds = new Set<string>();
+  const seenKehadiranComposite = new Set<string>();
+
+  (db.kehadiran || []).forEach(h => {
+    if (!h) return;
+    const cleanNis = String(h.nis || '').trim();
+    const cleanId = String(h.id || '').trim();
+    const cleanMinggu = String(h.mingguKe || '').trim();
+    const cleanBulan = String(h.bulan || '').trim();
+    const cleanTahun = String(h.tahun || '').trim();
+
+    if (!cleanNis || !cleanMinggu || !cleanBulan) return;
+    if (!activeStudentNis.has(cleanNis)) return;
+
+    const compKey = `${cleanNis}_${cleanMinggu}_${cleanBulan}_${cleanTahun}`;
+    if (seenKehadiranIds.has(cleanId) || seenKehadiranComposite.has(compKey)) {
+      return;
+    }
+
+    if (cleanId) seenKehadiranIds.add(cleanId);
+    seenKehadiranComposite.add(compKey);
+
+    const student = uniqueSiswa.find(s => s.nis === cleanNis);
+    if (student) {
+      const hadir = Number(h.hadir || 0);
+      const sakit = Number(h.sakit || 0);
+      const izin = Number(h.izin || 0);
+      const alfa = Number(h.alfa || 0);
+      const jumlah = h.jumlah !== undefined ? Number(h.jumlah) : (hadir + sakit + izin + alfa);
+      const status = h.status || (hadir > 0 ? 'Hadir' : (sakit > 0 ? 'Sakit' : (izin > 0 ? 'Izin' : 'Alfa')));
+
+      uniqueKehadiran.push({
+        ...h,
+        id: cleanId || 'H_' + compKey,
+        nis: cleanNis,
+        namaSiswa: student.nama,
+        kelas: student.kelas,
+        mingguKe: cleanMinggu,
+        bulan: cleanBulan,
+        tahun: cleanTahun,
+        hadir,
+        sakit,
+        izin,
+        alfa,
+        jumlah,
+        status,
+        keterangan: String(h.keterangan || '')
+      });
+    }
+  });
+
   return {
     siswa: uniqueSiswa,
     pelanggaran: uniquePelanggaran,
     pencatatan: uniquePencatatan,
-    pembinaan: uniquePembinaan
+    pembinaan: uniquePembinaan,
+    kehadiran: uniqueKehadiran
   };
 }
 
@@ -353,7 +426,8 @@ function readDB(): DBStructure {
         siswa: initialSiswa,
         pelanggaran: initialPelanggaran,
         pencatatan: initialPencatatan,
-        pembinaan: initialPembinaan
+        pembinaan: initialPembinaan,
+        kehadiran: initialKehadiran
       };
 
       // If we fell back to a temporary directory (e.g. on Vercel), copy seed file from build workspace if it exists
@@ -377,7 +451,8 @@ function readDB(): DBStructure {
       siswa: initialSiswa,
       pelanggaran: initialPelanggaran,
       pencatatan: initialPencatatan,
-      pembinaan: initialPembinaan
+      pembinaan: initialPembinaan,
+      kehadiran: initialKehadiran
     });
   }
 }
@@ -642,16 +717,20 @@ apiRouter.post('/settings/config', async (req, res) => {
     if (googleScriptUrl) {
       try {
         console.log('[Auto-Sync] Memulai pengunduhan data dari Google Sheets...');
-        const studentRes = await proxyToGoogleScript('getStudents', 'GET');
-        const violationRes = await proxyToGoogleScript('getViolations', 'GET');
-        const recordRes = await proxyToGoogleScript('getRecords', 'GET');
+        const [studentRes, violationRes, recordRes, kehadiranRes] = await Promise.all([
+          proxyToGoogleScript('getStudents', 'GET'),
+          proxyToGoogleScript('getViolations', 'GET'),
+          proxyToGoogleScript('getRecords', 'GET'),
+          proxyToGoogleScript('getKehadiran', 'GET').catch(() => ({ success: false, data: [] }))
+        ]);
 
         if (studentRes.success && violationRes.success && recordRes.success) {
           const newDb: DBStructure = {
             siswa: studentRes.data || [],
             pelanggaran: violationRes.data || [],
             pencatatan: recordRes.data?.pencatatan || [],
-            pembinaan: recordRes.data?.pembinaan || []
+            pembinaan: recordRes.data?.pembinaan || [],
+            kehadiran: (kehadiranRes && kehadiranRes.success && Array.isArray(kehadiranRes.data)) ? kehadiranRes.data : (readDB().kehadiran || [])
           };
           writeDB(newDb);
           pullSuccess = true;
@@ -712,10 +791,11 @@ apiRouter.get('/data', async (req, res) => {
       lastAutoSyncTime = Date.now();
       try {
         console.log(`[Auto-Sync] Menyelaraskan data secara langsung dari Google Sheets. URL: ${scriptUrl}`);
-        const [studentRes, violationRes, recordRes] = await Promise.all([
+        const [studentRes, violationRes, recordRes, kehadiranRes] = await Promise.all([
           proxyToGoogleScript('getStudents', 'GET', null, scriptUrl),
           proxyToGoogleScript('getViolations', 'GET', null, scriptUrl),
-          proxyToGoogleScript('getRecords', 'GET', null, scriptUrl)
+          proxyToGoogleScript('getRecords', 'GET', null, scriptUrl),
+          proxyToGoogleScript('getKehadiran', 'GET', null, scriptUrl).catch(() => ({ success: false, data: [] }))
         ]);
 
         if (studentRes.success && violationRes.success && recordRes.success) {
@@ -723,7 +803,8 @@ apiRouter.get('/data', async (req, res) => {
             siswa: [...(studentRes.data || []), ...(db.siswa || [])],
             pelanggaran: (violationRes.data && violationRes.data.length > 0) ? violationRes.data : (db.pelanggaran || []),
             pencatatan: recordRes.data?.pencatatan || [],
-            pembinaan: recordRes.data?.pembinaan || []
+            pembinaan: recordRes.data?.pembinaan || [],
+            kehadiran: (kehadiranRes && kehadiranRes.success && Array.isArray(kehadiranRes.data)) ? kehadiranRes.data : (db.kehadiran || [])
           };
           const sanitized = sanitizeAndDeduplicate(freshDb);
           writeDB(sanitized);
@@ -749,6 +830,8 @@ apiRouter.get('/data', async (req, res) => {
           pembinaan: db.pembinaan
         }
       });
+    case 'getKehadiran':
+      return res.json({ success: true, data: db.kehadiran || [] });
     default:
       return res.status(400).json({ success: false, message: 'Action tidak dikenali atau tidak disupport lewat GET.' });
   }
@@ -911,16 +994,72 @@ apiRouter.post('/data', async (req, res) => {
       return res.json({ success: true, message: 'Pencatatan pelanggaran berhasil dihapus.', data: updatedDb.pencatatan });
     }
 
+    case 'addKehadiran': {
+      const student = db.siswa.find(s => s.nis === body.nis);
+      if (!student) {
+        return res.status(404).json({ success: false, message: 'NIS siswa tidak terdaftar.' });
+      }
+
+      const hadir = Number(body.hadir || 0);
+      const sakit = Number(body.sakit || 0);
+      const izin = Number(body.izin || 0);
+      const alfa = Number(body.alfa || 0);
+      const jumlah = body.jumlah !== undefined ? Number(body.jumlah) : (hadir + sakit + izin + alfa);
+      const status = body.status || (hadir > 0 ? 'Hadir' : (sakit > 0 ? 'Sakit' : (izin > 0 ? 'Izin' : 'Alfa')));
+
+      const newKehadiran: KehadiranData = {
+        id: body.id || 'H-' + Date.now(),
+        nis: body.nis,
+        namaSiswa: student.nama,
+        kelas: student.kelas,
+        mingguKe: body.mingguKe,
+        bulan: body.bulan,
+        tahun: body.tahun,
+        hadir,
+        sakit,
+        izin,
+        alfa,
+        jumlah,
+        status,
+        keterangan: body.keterangan || ''
+      };
+
+      if (!db.kehadiran) db.kehadiran = [];
+
+      // Check if existing record by ID or by composite (NIS + mingguKe + bulan + tahun)
+      const existingIdx = db.kehadiran.findIndex(h => 
+        (body.id && h.id === body.id) || 
+        (h.nis === body.nis && h.mingguKe === body.mingguKe && h.bulan === body.bulan && h.tahun === body.tahun)
+      );
+
+      if (existingIdx !== -1) {
+        db.kehadiran[existingIdx] = { ...db.kehadiran[existingIdx], ...newKehadiran };
+      } else {
+        db.kehadiran.unshift(newKehadiran);
+      }
+
+      writeDB(db);
+      return res.json({ success: true, message: 'Rekap kehadiran berhasil disimpan.', data: db.kehadiran });
+    }
+
+    case 'deleteKehadiran': {
+      if (!db.kehadiran) db.kehadiran = [];
+      db.kehadiran = db.kehadiran.filter(h => h.id !== body.id);
+      writeDB(db);
+      return res.json({ success: true, message: 'Rekap kehadiran berhasil dihapus.', data: db.kehadiran });
+    }
+
     case 'syncPull': {
       if (!process.env.GOOGLE_SCRIPT_URL) {
         return res.status(400).json({ success: false, message: 'Google Sheets belum terhubung.' });
       }
       try {
         // Fetch all data from Google Sheets in parallel to improve synchronization performance (3x faster!)
-        const [studentRes, violationRes, recordRes] = await Promise.all([
+        const [studentRes, violationRes, recordRes, kehadiranRes] = await Promise.all([
           proxyToGoogleScript('getStudents', 'GET'),
           proxyToGoogleScript('getViolations', 'GET'),
-          proxyToGoogleScript('getRecords', 'GET')
+          proxyToGoogleScript('getRecords', 'GET'),
+          proxyToGoogleScript('getKehadiran', 'GET').catch(() => ({ success: false, data: [] }))
         ]);
 
         if (!studentRes.success || !violationRes.success || !recordRes.success) {
@@ -931,7 +1070,8 @@ apiRouter.post('/data', async (req, res) => {
           siswa: [...(studentRes.data || []), ...(db.siswa || [])],
           pelanggaran: (violationRes.data && violationRes.data.length > 0) ? violationRes.data : (db.pelanggaran || []),
           pencatatan: recordRes.data?.pencatatan || [],
-          pembinaan: recordRes.data?.pembinaan || []
+          pembinaan: recordRes.data?.pembinaan || [],
+          kehadiran: (kehadiranRes && kehadiranRes.success && Array.isArray(kehadiranRes.data)) ? kehadiranRes.data : (db.kehadiran || [])
         };
 
         const sanitized = sanitizeAndDeduplicate(newDb);
@@ -966,10 +1106,11 @@ apiRouter.post('/data', async (req, res) => {
         const localDb = readDB();
         
         // Fetch all data from Google Sheet in parallel to improve synchronization performance (3x faster!)
-        const [studentRes, violationRes, recordRes] = await Promise.all([
+        const [studentRes, violationRes, recordRes, kehadiranRes] = await Promise.all([
           proxyToGoogleScript('getStudents', 'GET'),
           proxyToGoogleScript('getViolations', 'GET'),
-          proxyToGoogleScript('getRecords', 'GET')
+          proxyToGoogleScript('getRecords', 'GET'),
+          proxyToGoogleScript('getKehadiran', 'GET').catch(() => ({ success: false, data: [] }))
         ]);
 
         if (!studentRes.success || !violationRes.success || !recordRes.success) {
@@ -980,13 +1121,15 @@ apiRouter.post('/data', async (req, res) => {
         const sheetPelanggaran: Pelanggaran[] = violationRes.data || [];
         const sheetPencatatan: Pencatatan[] = recordRes.data?.pencatatan || [];
         const sheetPembinaan: Pembinaan[] = recordRes.data?.pembinaan || [];
+        const sheetKehadiran: KehadiranData[] = (kehadiranRes && kehadiranRes.success && Array.isArray(kehadiranRes.data)) ? kehadiranRes.data : [];
 
         // Combine all lists and run sanitizeAndDeduplicate for perfect data integrity
         const rawMergedDb: DBStructure = {
           siswa: [...(localDb.siswa || []), ...sheetSiswa],
           pelanggaran: [...(localDb.pelanggaran || []), ...sheetPelanggaran],
           pencatatan: [...(localDb.pencatatan || []), ...sheetPencatatan],
-          pembinaan: [...(localDb.pembinaan || []), ...sheetPembinaan]
+          pembinaan: [...(localDb.pembinaan || []), ...sheetPembinaan],
+          kehadiran: [...(localDb.kehadiran || []), ...sheetKehadiran]
         };
 
         const mergedDb = sanitizeAndDeduplicate(rawMergedDb);

@@ -1,4 +1,4 @@
-import { Siswa, Pelanggaran, Pencatatan, Pembinaan, AuthResponse, ApiResponse } from '../types';
+import { Siswa, Pelanggaran, Pencatatan, Pembinaan, KehadiranData, AuthResponse, ApiResponse } from '../types';
 
 // Helper to get active auth token and Google Script URL for stateless serverless environments like Vercel
 function getAuthHeaders(): Record<string, string> {
@@ -217,7 +217,48 @@ export const googleSheetApi = {
     }
   },
 
-  // 6. Data Synchronization APIs
+  // 6. Attendance (Rekap Kehadiran) APIs
+  async getKehadiran(): Promise<ApiResponse<KehadiranData[]>> {
+    try {
+      const response = await fetch('/api/data?action=getKehadiran', {
+        headers: getAuthHeaders()
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Fetch kehadiran error:', error);
+      return { success: false, message: 'Gagal mengambil data rekap kehadiran.' };
+    }
+  },
+
+  async addKehadiran(data: Partial<KehadiranData> & { nis: string; mingguKe: string; bulan: string; tahun: string }): Promise<ApiResponse<KehadiranData[]>> {
+    try {
+      const response = await fetch('/api/data?action=addKehadiran', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Add kehadiran error:', error);
+      return { success: false, message: 'Gagal menyimpan rekap kehadiran.' };
+    }
+  },
+
+  async deleteKehadiran(id: string): Promise<ApiResponse<KehadiranData[]>> {
+    try {
+      const response = await fetch('/api/data?action=deleteKehadiran', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ id })
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Delete kehadiran error:', error);
+      return { success: false, message: 'Gagal menghapus rekap kehadiran.' };
+    }
+  },
+
+  // 7. Data Synchronization APIs
   async syncPull(): Promise<ApiResponse<any>> {
     try {
       const response = await fetch('/api/data?action=syncPull', {

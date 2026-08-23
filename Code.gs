@@ -31,6 +31,8 @@ function doGet(e) {
       responseData = getViolations(sheet);
     } else if (action === 'getRecords') {
       responseData = getRecords(sheet);
+    } else if (action === 'getKehadiran') {
+      responseData = getKehadiran(sheet);
     } else {
       return createJsonResponse({ success: false, message: 'Action tidak dikenali atau format GET salah' });
     }
@@ -71,6 +73,10 @@ function doPost(e) {
       responseData = addRecord(sheet, data);
     } else if (action === 'deleteRecord') {
       responseData = deleteRecord(sheet, data);
+    } else if (action === 'addKehadiran') {
+      responseData = addKehadiran(sheet, data);
+    } else if (action === 'deleteKehadiran') {
+      responseData = deleteKehadiran(sheet, data);
     } else if (action === 'overwriteAllData') {
       responseData = overwriteAllData(sheet, data);
     } else {
@@ -95,7 +101,8 @@ function initializeSheets(ss) {
     'SISWA': ['ID', 'NIS', 'Nama', 'Kelas', 'JK', 'Nama Orang Tua', 'No HP', 'Foto'],
     'PELANGGARAN': ['ID', 'Kode', 'Nama Pelanggaran', 'Kategori', 'Poin'],
     'PENCATATAN': ['ID', 'Tanggal', 'NIS', 'Nama Siswa', 'Kelas', 'Pelanggaran', 'Poin', 'Petugas', 'Keterangan', 'Foto'],
-    'PEMBINAAN': ['ID', 'NIS', 'Nama Siswa', 'Total Poin', 'Tindakan', 'Tanggal']
+    'PEMBINAAN': ['ID', 'NIS', 'Nama Siswa', 'Total Poin', 'Tindakan', 'Tanggal'],
+    'KEHADIRAN': ['ID', 'NIS', 'Nama Siswa', 'Kelas', 'Minggu Ke', 'Bulan', 'Tahun', 'Hadir', 'Sakit', 'Izin', 'Alfa', 'Jumlah', 'Status', 'Keterangan']
   };
   
   for (var name in sheets) {
@@ -266,21 +273,35 @@ function deleteStudent(ss, data) {
     }
   }
   
-  // Jika siswa dihapus, bersihkan pencatatan dan pembinaan milik siswa tersebut
+  // Jika siswa dihapus, bersihkan pencatatan, pembinaan, dan kehadiran milik siswa tersebut
   if (nisToDelete) {
     var shPencatatan = ss.getSheetByName('PENCATATAN');
-    var valPencatatan = shPencatatan.getDataRange().getValues();
-    for (var j = valPencatatan.length - 1; j >= 1; j--) {
-      if (String(valPencatatan[j][2]) === nisToDelete) {
-        shPencatatan.deleteRow(j + 1);
+    if (shPencatatan) {
+      var valPencatatan = shPencatatan.getDataRange().getValues();
+      for (var j = valPencatatan.length - 1; j >= 1; j--) {
+        if (String(valPencatatan[j][2]) === nisToDelete) {
+          shPencatatan.deleteRow(j + 1);
+        }
       }
     }
     
     var shPembinaan = ss.getSheetByName('PEMBINAAN');
-    var valPembinaan = shPembinaan.getDataRange().getValues();
-    for (var k = valPembinaan.length - 1; k >= 1; k--) {
-      if (String(valPembinaan[k][1]) === nisToDelete) {
-        shPembinaan.deleteRow(k + 1);
+    if (shPembinaan) {
+      var valPembinaan = shPembinaan.getDataRange().getValues();
+      for (var k = valPembinaan.length - 1; k >= 1; k--) {
+        if (String(valPembinaan[k][1]) === nisToDelete) {
+          shPembinaan.deleteRow(k + 1);
+        }
+      }
+    }
+
+    var shKehadiran = ss.getSheetByName('KEHADIRAN');
+    if (shKehadiran) {
+      var valKehadiran = shKehadiran.getDataRange().getValues();
+      for (var m = valKehadiran.length - 1; m >= 1; m--) {
+        if (String(valKehadiran[m][1]) === nisToDelete) {
+          shKehadiran.deleteRow(m + 1);
+        }
       }
     }
   }
@@ -465,7 +486,116 @@ function recalculatePembinaanForStudent(ss, nis, namaSiswa, tanggalPencatatan) {
   }
 }
 
-// 10. OVERWRITE ALL DATA FOR BULK SYNC
+// 10. GET KEHADIRAN
+function getKehadiran(ss) {
+  var sh = ss.getSheetByName('KEHADIRAN');
+  if (!sh) return [];
+  var rawData = getSheetData(sh);
+  
+  return rawData.map(function(item) {
+    var hadir = Number(item['Hadir'] || 0);
+    var sakit = Number(item['Sakit'] || 0);
+    var izin = Number(item['Izin'] || 0);
+    var alfa = Number(item['Alfa'] || 0);
+    var jumlah = item['Jumlah'] !== undefined && item['Jumlah'] !== '' ? Number(item['Jumlah']) : (hadir + sakit + izin + alfa);
+    var status = String(item['Status'] || (hadir > 0 ? 'Hadir' : (sakit > 0 ? 'Sakit' : (izin > 0 ? 'Izin' : 'Alfa'))));
+    
+    return {
+      id: String(item['ID'] || ''),
+      nis: String(item['NIS'] || ''),
+      namaSiswa: String(item['Nama Siswa'] || ''),
+      kelas: String(item['Kelas'] || ''),
+      mingguKe: String(item['Minggu Ke'] || ''),
+      bulan: String(item['Bulan'] || ''),
+      tahun: String(item['Tahun'] || ''),
+      hadir: hadir,
+      sakit: sakit,
+      izin: izin,
+      alfa: alfa,
+      jumlah: jumlah,
+      status: status,
+      keterangan: String(item['Keterangan'] || '')
+    };
+  });
+}
+
+// 11. ADD KEHADIRAN (Create / Update)
+function addKehadiran(ss, data) {
+  var sh = ss.getSheetByName('KEHADIRAN');
+  if (!sh) {
+    sh = ss.insertSheet('KEHADIRAN');
+    sh.appendRow(['ID', 'NIS', 'Nama Siswa', 'Kelas', 'Minggu Ke', 'Bulan', 'Tahun', 'Hadir', 'Sakit', 'Izin', 'Alfa', 'Jumlah', 'Status', 'Keterangan']);
+  }
+  
+  var values = sh.getDataRange().getValues();
+  var id = data.id || ('H-' + new Date().getTime());
+  var foundRow = -1;
+  
+  for (var i = 1; i < values.length; i++) {
+    // Match by ID or by unique composite (NIS + MingguKe + Bulan + Tahun)
+    var isSameId = String(values[i][0]) === String(id);
+    var isSameWeek = String(values[i][1]) === String(data.nis) && 
+                     String(values[i][4]) === String(data.mingguKe) && 
+                     String(values[i][5]) === String(data.bulan) && 
+                     String(values[i][6]) === String(data.tahun);
+                     
+    if (isSameId || isSameWeek) {
+      foundRow = i + 1;
+      break;
+    }
+  }
+  
+  var hadir = Number(data.hadir || 0);
+  var sakit = Number(data.sakit || 0);
+  var izin = Number(data.izin || 0);
+  var alfa = Number(data.alfa || 0);
+  var jumlah = Number(data.jumlah !== undefined ? data.jumlah : (hadir + sakit + izin + alfa));
+  var status = data.status || (hadir > 0 ? 'Hadir' : (sakit > 0 ? 'Sakit' : (izin > 0 ? 'Izin' : 'Alfa')));
+  
+  var rowData = [
+    id,
+    data.nis,
+    data.namaSiswa,
+    data.kelas,
+    data.mingguKe,
+    data.bulan,
+    data.tahun,
+    hadir,
+    sakit,
+    izin,
+    alfa,
+    jumlah,
+    status,
+    data.keterangan || ''
+  ];
+  
+  if (foundRow !== -1) {
+    sh.getRange(foundRow, 1, 1, rowData.length).setValues([rowData]);
+  } else {
+    sh.appendRow(rowData);
+  }
+  
+  return getKehadiran(ss);
+}
+
+// 12. DELETE KEHADIRAN
+function deleteKehadiran(ss, data) {
+  var sh = ss.getSheetByName('KEHADIRAN');
+  if (!sh) return [];
+  var values = sh.getDataRange().getValues();
+  var id = data.id;
+  
+  for (var i = values.length - 1; i >= 1; i--) {
+    if (String(values[i][0]) === String(id)) {
+      sh.deleteRow(i + 1);
+      break;
+    }
+  }
+  
+  return getKehadiran(ss);
+}
+
+// 13. OVERWRITE ALL DATA FOR BULK SYNC
 function overwriteAllData(ss, data) {
   // Overwrite SISWA sheet
   var shSiswa = ss.getSheetByName('SISWA');
@@ -523,6 +653,40 @@ function overwriteAllData(ss, data) {
           cleanDate = cleanDate.split('T')[0];
         }
         shPembinaan.appendRow([p.id, p.nis, p.namaSiswa, p.totalPoin, p.tindakan, cleanDate]);
+      }
+    }
+  }
+
+  // Overwrite KEHADIRAN sheet
+  var shKehadiran = ss.getSheetByName('KEHADIRAN');
+  if (shKehadiran) {
+    shKehadiran.clearContents();
+    shKehadiran.appendRow(['ID', 'NIS', 'Nama Siswa', 'Kelas', 'Minggu Ke', 'Bulan', 'Tahun', 'Hadir', 'Sakit', 'Izin', 'Alfa', 'Jumlah', 'Status', 'Keterangan']);
+    if (data.kehadiran && data.kehadiran.length > 0) {
+      for (var k = 0; k < data.kehadiran.length; k++) {
+        var h = data.kehadiran[k];
+        var hHadir = Number(h.hadir || 0);
+        var hSakit = Number(h.sakit || 0);
+        var hIzin = Number(h.izin || 0);
+        var hAlfa = Number(h.alfa || 0);
+        var hJumlah = Number(h.jumlah !== undefined ? h.jumlah : (hHadir + hSakit + hIzin + hAlfa));
+        var hStatus = h.status || (hHadir > 0 ? 'Hadir' : (hSakit > 0 ? 'Sakit' : (hIzin > 0 ? 'Izin' : 'Alfa')));
+        shKehadiran.appendRow([
+          h.id,
+          h.nis,
+          h.namaSiswa,
+          h.kelas,
+          h.mingguKe,
+          h.bulan,
+          h.tahun,
+          hHadir,
+          hSakit,
+          hIzin,
+          hAlfa,
+          hJumlah,
+          hStatus,
+          h.keterangan || ''
+        ]);
       }
     }
   }
