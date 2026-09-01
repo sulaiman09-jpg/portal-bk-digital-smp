@@ -83,16 +83,13 @@ export default function SetupPanduan() {
   };
 
   const handleSyncPull = async () => {
-    if (!window.confirm('PERINGATAN: Menarik data dari Google Sheet akan menimpa seluruh data lokal yang ada di aplikasi Anda saat ini. Apakah Anda yakin ingin melanjutkan?')) {
-      return;
-    }
     setSyncLoading(true);
     setSyncSuccess('');
     setSyncError('');
     try {
       const res = await googleSheetApi.syncPull();
       if (res.success) {
-        setSyncSuccess('Tarik data berhasil! Semua data di aplikasi telah diperbarui dengan data terbaru dari Google Sheet.');
+        setSyncSuccess(res.message || 'Tarik data berhasil! Semua data di aplikasi telah diperbarui dengan data terbaru dari Google Sheet.');
         setTimeout(() => {
           window.location.reload();
         }, 1500);
@@ -107,16 +104,13 @@ export default function SetupPanduan() {
   };
 
   const handleSyncPush = async () => {
-    if (!window.confirm('PERINGATAN: Mengirim data lokal akan menimpa isi spreadsheet Google Sheet Anda saat ini dengan data dari aplikasi. Apakah Anda yakin ingin melanjutkan?')) {
-      return;
-    }
     setSyncLoading(true);
     setSyncSuccess('');
     setSyncError('');
     try {
       const res = await googleSheetApi.syncPush();
       if (res.success) {
-        setSyncSuccess('Kirim data berhasil! Semua data lokal aplikasi berhasil diunggah dan menimpa Google Sheet Anda.');
+        setSyncSuccess(res.message || 'Kirim data berhasil! Semua data lokal aplikasi berhasil diunggah dan menimpa Google Sheet Anda.');
       } else {
         setSyncError(res.message || 'Gagal mengirim data ke Google Sheet. Pastikan Anda sudah memperbarui Google Apps Script Anda ke versi terbaru dari tab panduan.');
       }
@@ -142,7 +136,8 @@ export default function SetupPanduan() {
         setSyncError(res.message || 'Gagal melakukan sinkronisasi dua arah. Pastikan Anda sudah memperbarui Google Apps Script Anda ke versi terbaru dari tab panduan.');
       }
     } catch (err: any) {
-      setSyncError('Gagal melakukan sinkronisasi dua arah: ' + err.message);
+      console.error('[SyncMerge Error]', err);
+      setSyncError(err?.message || 'Gagal melakukan sinkronisasi dua arah.');
     } finally {
       setSyncLoading(false);
     }

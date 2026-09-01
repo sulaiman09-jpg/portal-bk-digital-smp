@@ -291,10 +291,11 @@ export const googleSheetApi = {
         method: 'POST',
         headers: getAuthHeaders()
       });
-      return await response.json();
-    } catch (error) {
+      const data = await response.json();
+      return data;
+    } catch (error: any) {
       console.error('Sync merge error:', error);
-      return { success: false, message: 'Gagal mensinkronisasikan data dua arah.' };
+      return { success: false, message: error?.message || 'Gagal mensinkronisasikan data dua arah.' };
     }
   }
 };

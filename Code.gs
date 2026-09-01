@@ -16,9 +16,39 @@
  * 9. Salin URL Aplikasi Web yang diberikan, lalu masukkan ke file .env atau panel Setup di aplikasi web.
  */
 
+// =========================================================================================
+// PENGATURAN SPREADSHEET (PENTING JIKA SKRIP MANDIRI)
+// Jika skrip dibuat dari menu "Ekstensi > Apps Script" langsung di spreadsheet, biarkan kosong "".
+// Jika skrip dibuat mandiri dari script.google.com, MASUKKAN ID SPREADSHEET DI DALAM TANDA KUTIP:
+// Contoh: var SPREADSHEET_ID = "1ZiETwWhcFvS0nTaNPan8GVlFkY2tcUGaTYipkjWIUlY";
+var SPREADSHEET_ID = ""; 
+// =========================================================================================
+
+function getTargetSpreadsheet() {
+  if (SPREADSHEET_ID && SPREADSHEET_ID.trim() !== "") {
+    return SpreadsheetApp.openById(SPREADSHEET_ID.trim());
+  }
+  var active = SpreadsheetApp.getActiveSpreadsheet();
+  if (!active) {
+    throw new Error("Spreadsheet tidak ditemukan! Harap isi var SPREADSHEET_ID = 'ID_SPREADSHEET_ANDA' pada baris 24.");
+  }
+  return active;
+}
+
+/**
+ * Jalankan fungsi ini (klik Run/Jalankan) untuk menguji koneksi & memberikan izin Google pertama kali!
+ */
+function testKoneksi() {
+  var ss = getTargetSpreadsheet();
+  Logger.log("BERHASIL TERHUBUNG KE SPREADSHEET: " + ss.getName());
+  initializeSheets(ss);
+  Logger.log("SEMUA TAB SHEET (SISWA, PELANGGARAN, PENCATATAN, PEMBINAAN, KEHADIRAN) SIAP!");
+  return "SUKSES: " + ss.getName();
+}
+
 function doGet(e) {
   var action = e.parameter.action;
-  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = getTargetSpreadsheet();
   
   // Pastikan sheet siap digunakan
   initializeSheets(sheet);
@@ -44,7 +74,7 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = getTargetSpreadsheet();
   
   initializeSheets(sheet);
   
@@ -97,6 +127,9 @@ function createJsonResponse(obj) {
 
 // Menginisialisasi sheet-sheet jika kosong / belum ada
 function initializeSheets(ss) {
+  if (!ss) {
+    ss = getTargetSpreadsheet();
+  }
   var sheets = {
     'SISWA': ['ID', 'NIS', 'Nama', 'Kelas', 'JK', 'Nama Orang Tua', 'No HP', 'Foto'],
     'PELANGGARAN': ['ID', 'Kode', 'Nama Pelanggaran', 'Kategori', 'Poin'],
@@ -159,29 +192,98 @@ function getSheetData(sh) {
   return list;
 }
 
-// 1. GET STUDENTS
+// 1. GET STUDENTS (Mendukung tab SISWA atau DATA_SISWA secara cerdas)
 function getStudents(ss) {
   var sh = ss.getSheetByName('SISWA');
-  var rawData = getSheetData(sh);
+  var shAlt = ss.getSheetByName('DATA_SISWA');
   
-  return rawData.map(function(item) {
+  var rawData = [];
+  if (sh && shAlt) {
+    var d1 = getSheetData(sh);
+    var d2 = getSheetData(shAlt);
+    rawData = d1.length >= d2.length ? d1 : d2;
+  } else if (sh) {
+    rawData = getSheetData(sh);
+  } else if (shAlt) {
+    rawData = getSheetData(shAlt);
+  }
+  
+  return rawData.map(function(item, idx) {
+    var id = String(item['ID'] || item['id'] || ('S_' + (item['NIS'] || item['nis'] || (idx + 1))));
+    var nis = String(item['NIS'] || item['nis'] || item['NISN'] || item['No Induk'] || '');
+    var nama = String(item['Nama'] || item['Nama Siswa'] || item['NAMA'] || item['NAMA SISWA'] || '');
+    var kelas = String(item['Kelas'] || item['KELAS'] || item['Rombel'] || '');
+    var jk = String(item['JK'] || item['Jenis Kelamin'] || item['L/P'] || 'L').toUpperCase().startsWith('P') ? 'P' : 'L';
+    var namaOrtu = String(item['Nama Orang Tua'] || item['Nama Ortu'] || item['Orang Tua'] || item['Wali'] || '');
+    var noHp = String(item['No HP'] || item['No Telepon'] || item['Telepon'] || item['No WA'] || '');
+    var foto = String(item['Foto'] || item['Photo'] || '');
+    
     return {
-      id: String(item['ID'] || ''),
-      nis: String(item['NIS'] || ''),
-      nama: String(item['Nama'] || ''),
-      kelas: String(item['Kelas'] || ''),
-      jk: String(item['JK'] || 'L'),
-      namaOrangTua: String(item['Nama Orang Tua'] || ''),
-      noHp: String(item['No HP'] || ''),
-      foto: String(item['Foto'] || '')
+      id: id,
+      nis: nis,
+      nama: nama,
+      kelas: kelas,
+      jk: jk,
+      namaOrangTua: namaOrtu,
+      noHp: noHp,
+      foto: foto
     };
+  }).filter(function(s) {
+    return s.nama && s.nama.trim() !== '';
   });
 }
+
+var DEFAULT_MASTER_PELANGGARAN_GS = [
+  ['P_P01', 'P01', 'Terlambat masuk sekolah / kelas (< 15 menit)', 'Ringan', 5],
+  ['P_P02', 'P02', 'Terlambat masuk sekolah (> 15 menit)', 'Ringan', 10],
+  ['P_P03', 'P03', 'Tidak memakai atribut seragam lengkap (topi/dasi/ikat pinggang/kaos kaki)', 'Ringan', 5],
+  ['P_P04', 'P04', 'Memakai seragam tidak sesuai ketentuan hari / baju tidak dimasukkan / tidak rapi', 'Ringan', 5],
+  ['P_P05', 'P05', 'Rambut gondrong / diwarnai / tidak sesuai ketentuan sekolah', 'Ringan', 10],
+  ['P_P06', 'P06', 'Membuang sampah sembarangan di lingkungan sekolah', 'Ringan', 5],
+  ['P_P07', 'P07', 'Menggunakan HP / gadget tanpa izin guru saat jam pelajaran (KBM)', 'Ringan', 10],
+  ['P_P08', 'P08', 'Makan / minum di dalam kelas saat kegiatan belajar mengajar berlangsung', 'Ringan', 5],
+  ['P_P09', 'P09', 'Memakai make-up / perhiasan berlebihan / bertato / bertindik (putra)', 'Ringan', 10],
+  ['P_P10', 'P10', 'Tidak membawa buku pelajaran / tidak mengerjakan tugas sekolah', 'Ringan', 5],
+  ['P_P11', 'P11', 'Keluar kelas tanpa izin guru piket / guru pengajar saat KBM', 'Ringan', 5],
+  ['P_P12', 'P12', 'Tidak mengikuti upacara bendera / apel pagi / pembiasaan tanpa izin', 'Ringan', 15],
+  ['P_P13', 'P13', 'Tidak masuk sekolah tanpa keterangan / Alpa (1 hari)', 'Sedang', 20],
+  ['P_P14', 'P14', 'Meninggalkan sekolah sebelum jam pelajaran usai tanpa izin (Membolos)', 'Sedang', 25],
+  ['P_P15', 'P15', 'Melompati pagar / jendela / pintu gerbang sekolah', 'Sedang', 30],
+  ['P_P16', 'P16', 'Mencontek / berbuat curang saat ulangan / ujian semester', 'Sedang', 25],
+  ['P_P17', 'P17', 'Bersikap tidak sopan / membantah / menentang guru atau staf sekolah', 'Sedang', 30],
+  ['P_P18', 'P18', 'Membawa / merokok / rokok elektrik (vape) di lingkungan sekolah', 'Sedang', 35],
+  ['P_P19', 'P19', 'Mencoret-coret dinding, meja, kursi, merusak fasilitas sekolah (Vandalisme)', 'Sedang', 25],
+  ['P_P20', 'P20', 'Mengendarai motor knalpot bising / ugal-ugalan di area sekolah', 'Sedang', 25],
+  ['P_P21', 'P21', 'Mengintimidasi / mengejek / mengancam sesama siswa (Bullying verbal)', 'Sedang', 35],
+  ['P_P22', 'P22', 'Membawa barang terlarang / bermain judi / kartu di sekolah', 'Sedang', 20],
+  ['P_P23', 'P23', 'Terlibat perkelahian / tawuran antar siswa atau antar sekolah', 'Berat', 75],
+  ['P_P24', 'P24', 'Membawa senjata tajam (sajam) / senjata api / benda berbahaya ke sekolah', 'Berat', 75],
+  ['P_P25', 'P25', 'Melakukan pemalakan / pemerasan / pencurian uang atau barang milik orang lain', 'Berat', 50],
+  ['P_P26', 'P26', 'Membawa / mengonsumsi / mengedarkan minuman keras / alkohol', 'Berat', 75],
+  ['P_P27', 'P27', 'Membawa / menggunakan / mengedarkan narkoba atau obat-obatan terlarang', 'Berat', 100],
+  ['P_P28', 'P28', 'Melakukan pelecehan seksual / perbuatan asusila di lingkungan sekolah', 'Berat', 100],
+  ['P_P29', 'P29', 'Melakukan kekerasan fisik (Bullying fisik) yang mencederai orang lain', 'Berat', 75],
+  ['P_P30', 'P30', 'Menyebarkan konten pornografi / mencemarkan nama baik sekolah di media sosial', 'Berat', 75],
+  ['P_P31', 'P31', 'Memalsukan tanda tangan kepala sekolah / guru / surat izin sekolah', 'Berat', 50]
+];
 
 // 2. GET VIOLATIONS
 function getViolations(ss) {
   var sh = ss.getSheetByName('PELANGGARAN');
+  if (!sh) {
+    sh = ss.insertSheet('PELANGGARAN');
+    sh.appendRow(['ID', 'Kode', 'Nama Pelanggaran', 'Kategori', 'Poin']);
+  }
+  
   var rawData = getSheetData(sh);
+  
+  // Jika tab PELANGGARAN masih kosong atau baru dibuat, isi otomatis dengan 31 master aturan pelanggaran
+  if (rawData.length === 0) {
+    for (var i = 0; i < DEFAULT_MASTER_PELANGGARAN_GS.length; i++) {
+      sh.appendRow(DEFAULT_MASTER_PELANGGARAN_GS[i]);
+    }
+    rawData = getSheetData(sh);
+  }
   
   return rawData.map(function(item) {
     return {
@@ -595,7 +697,7 @@ function deleteKehadiran(ss, data) {
   return getKehadiran(ss);
 }
 
-// 13. OVERWRITE ALL DATA FOR BULK SYNC
+// 13. OVERWRITE ALL DATA FOR BULK SYNC (Ultra Fast Batch Writing)
 function overwriteAllData(ss, data) {
   // Overwrite SISWA sheet
   var shSiswa = ss.getSheetByName('SISWA');
@@ -603,10 +705,19 @@ function overwriteAllData(ss, data) {
     shSiswa.clearContents();
     shSiswa.appendRow(['ID', 'NIS', 'Nama', 'Kelas', 'JK', 'Nama Orang Tua', 'No HP', 'Foto']);
     if (data.siswa && data.siswa.length > 0) {
-      for (var i = 0; i < data.siswa.length; i++) {
-        var s = data.siswa[i];
-        shSiswa.appendRow([s.id, s.nis, s.nama, s.kelas, s.jk, s.namaOrangTua, s.noHp, s.foto || '']);
-      }
+      var siswaRows = data.siswa.map(function(s) {
+        return [
+          String(s.id || ''),
+          String(s.nis || ''),
+          String(s.nama || ''),
+          String(s.kelas || ''),
+          String(s.jk || 'L'),
+          String(s.namaOrangTua || ''),
+          String(s.noHp || ''),
+          String(s.foto || '')
+        ];
+      });
+      shSiswa.getRange(2, 1, siswaRows.length, 8).setValues(siswaRows);
     }
   }
 
@@ -616,10 +727,16 @@ function overwriteAllData(ss, data) {
     shPelanggaran.clearContents();
     shPelanggaran.appendRow(['ID', 'Kode', 'Nama Pelanggaran', 'Kategori', 'Poin']);
     if (data.pelanggaran && data.pelanggaran.length > 0) {
-      for (var i = 0; i < data.pelanggaran.length; i++) {
-        var v = data.pelanggaran[i];
-        shPelanggaran.appendRow([v.id, v.kode, v.namaPelanggaran, v.kategori, Number(v.poin)]);
-      }
+      var pelRows = data.pelanggaran.map(function(v) {
+        return [
+          String(v.id || ''),
+          String(v.kode || ''),
+          String(v.namaPelanggaran || ''),
+          String(v.kategori || 'Ringan'),
+          Number(v.poin || 0)
+        ];
+      });
+      shPelanggaran.getRange(2, 1, pelRows.length, 5).setValues(pelRows);
     }
   }
 
@@ -629,14 +746,25 @@ function overwriteAllData(ss, data) {
     shPencatatan.clearContents();
     shPencatatan.appendRow(['ID', 'Tanggal', 'NIS', 'Nama Siswa', 'Kelas', 'Pelanggaran', 'Poin', 'Petugas', 'Keterangan', 'Foto']);
     if (data.pencatatan && data.pencatatan.length > 0) {
-      for (var i = 0; i < data.pencatatan.length; i++) {
-        var r = data.pencatatan[i];
-        var cleanDate = r.tanggal;
+      var pencRows = data.pencatatan.map(function(r) {
+        var cleanDate = r.tanggal || '';
         if (cleanDate && cleanDate.indexOf('T') !== -1) {
           cleanDate = cleanDate.split('T')[0];
         }
-        shPencatatan.appendRow([r.id, cleanDate, r.nis, r.namaSiswa, r.kelas, r.pelanggaran, r.poin, r.petugas, r.keterangan || '', r.foto || '']);
-      }
+        return [
+          String(r.id || ''),
+          cleanDate,
+          String(r.nis || ''),
+          String(r.namaSiswa || ''),
+          String(r.kelas || ''),
+          String(r.pelanggaran || ''),
+          Number(r.poin || 0),
+          String(r.petugas || ''),
+          String(r.keterangan || ''),
+          String(r.foto || '')
+        ];
+      });
+      shPencatatan.getRange(2, 1, pencRows.length, 10).setValues(pencRows);
     }
   }
 
@@ -646,14 +774,21 @@ function overwriteAllData(ss, data) {
     shPembinaan.clearContents();
     shPembinaan.appendRow(['ID', 'NIS', 'Nama Siswa', 'Total Poin', 'Tindakan', 'Tanggal']);
     if (data.pembinaan && data.pembinaan.length > 0) {
-      for (var i = 0; i < data.pembinaan.length; i++) {
-        var p = data.pembinaan[i];
-        var cleanDate = p.tanggal;
+      var pembRows = data.pembinaan.map(function(p) {
+        var cleanDate = p.tanggal || '';
         if (cleanDate && cleanDate.indexOf('T') !== -1) {
           cleanDate = cleanDate.split('T')[0];
         }
-        shPembinaan.appendRow([p.id, p.nis, p.namaSiswa, p.totalPoin, p.tindakan, cleanDate]);
-      }
+        return [
+          String(p.id || ''),
+          String(p.nis || ''),
+          String(p.namaSiswa || ''),
+          Number(p.totalPoin || 0),
+          String(p.tindakan || ''),
+          cleanDate
+        ];
+      });
+      shPembinaan.getRange(2, 1, pembRows.length, 6).setValues(pembRows);
     }
   }
 
@@ -663,31 +798,31 @@ function overwriteAllData(ss, data) {
     shKehadiran.clearContents();
     shKehadiran.appendRow(['ID', 'NIS', 'Nama Siswa', 'Kelas', 'Minggu Ke', 'Bulan', 'Tahun', 'Hadir', 'Sakit', 'Izin', 'Alfa', 'Jumlah', 'Status', 'Keterangan']);
     if (data.kehadiran && data.kehadiran.length > 0) {
-      for (var k = 0; k < data.kehadiran.length; k++) {
-        var h = data.kehadiran[k];
+      var kehRows = data.kehadiran.map(function(h) {
         var hHadir = Number(h.hadir || 0);
         var hSakit = Number(h.sakit || 0);
         var hIzin = Number(h.izin || 0);
         var hAlfa = Number(h.alfa || 0);
         var hJumlah = Number(h.jumlah !== undefined ? h.jumlah : (hHadir + hSakit + hIzin + hAlfa));
         var hStatus = h.status || (hHadir > 0 ? 'Hadir' : (hSakit > 0 ? 'Sakit' : (hIzin > 0 ? 'Izin' : 'Alfa')));
-        shKehadiran.appendRow([
-          h.id,
-          h.nis,
-          h.namaSiswa,
-          h.kelas,
-          h.mingguKe,
-          h.bulan,
-          h.tahun,
+        return [
+          String(h.id || ''),
+          String(h.nis || ''),
+          String(h.namaSiswa || ''),
+          String(h.kelas || ''),
+          String(h.mingguKe || ''),
+          String(h.bulan || ''),
+          String(h.tahun || ''),
           hHadir,
           hSakit,
           hIzin,
           hAlfa,
           hJumlah,
           hStatus,
-          h.keterangan || ''
-        ]);
-      }
+          String(h.keterangan || '')
+        ];
+      });
+      shKehadiran.getRange(2, 1, kehRows.length, 14).setValues(kehRows);
     }
   }
 

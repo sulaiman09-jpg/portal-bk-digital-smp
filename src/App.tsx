@@ -11,6 +11,7 @@ import PeringkatLeaderboard from './components/PeringkatLeaderboard';
 import SetupPanduan from './components/SetupPanduan';
 import RuangKelas from './components/RuangKelas';
 import { belongsToSchool } from './utils/schoolUtils';
+import { DEFAULT_MASTER_PELANGGARAN } from './utils/defaultViolations';
 
 // Helper to determine if a school/class tab is accessible by a user
 function isTabAccessible(tabId: string, user: User | null): boolean {
@@ -98,7 +99,7 @@ export default function App() {
 
   // Application Data States
   const [siswa, setSiswa] = useState<Siswa[]>([]);
-  const [violations, setViolations] = useState<Pelanggaran[]>([]);
+  const [violations, setViolations] = useState<Pelanggaran[]>(DEFAULT_MASTER_PELANGGARAN);
   const [pencatatan, setPencatatan] = useState<Pencatatan[]>([]);
   const [pembinaan, setPembinaan] = useState<Pembinaan[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -163,7 +164,11 @@ export default function App() {
       ]);
 
       if (resSiswa.success && resSiswa.data) setSiswa(resSiswa.data);
-      if (resViolations.success && resViolations.data) setViolations(resViolations.data);
+      if (resViolations.success && resViolations.data && resViolations.data.length > 0) {
+        setViolations(resViolations.data);
+      } else {
+        setViolations(DEFAULT_MASTER_PELANGGARAN);
+      }
       
       if (resRecords.success && resRecords.data) {
         setPencatatan(resRecords.data.pencatatan);

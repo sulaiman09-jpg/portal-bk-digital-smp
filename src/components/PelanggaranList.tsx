@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Pelanggaran, Role } from '../types';
 import { Search, Plus, Edit2, Trash2, X, AlertCircle } from 'lucide-react';
+import { DEFAULT_MASTER_PELANGGARAN } from '../utils/defaultViolations';
 
 interface PelanggaranListProps {
   violations: Pelanggaran[];
@@ -12,6 +13,11 @@ interface PelanggaranListProps {
 export default function PelanggaranList({ violations, userRole, onAddViolation, onDeleteViolation }: PelanggaranListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'Semua' | 'Ringan' | 'Sedang' | 'Berat'>('Semua');
+
+  const activeViolations = useMemo(() => {
+    if (violations && violations.length > 0) return violations;
+    return DEFAULT_MASTER_PELANGGARAN;
+  }, [violations]);
 
   // Modal forms state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -30,7 +36,7 @@ export default function PelanggaranList({ violations, userRole, onAddViolation, 
   const canEdit = userRole === 'Admin' || userRole === 'Guru BK';
 
   // 1. Filter and Search
-  const filteredViolations = violations.filter(item => {
+  const filteredViolations = activeViolations.filter(item => {
     const matchesSearch = item.namaPelanggaran.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           item.kode.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = categoryFilter === 'Semua' || item.kategori === categoryFilter;

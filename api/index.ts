@@ -153,12 +153,31 @@ console.log(`[Express API] Using persistent data store path: ${DATA_STORE_PATH}`
 
 const CONFIG_STORE_PATH = path.join(path.dirname(DATA_STORE_PATH), 'config-settings.json');
 try {
+  let loadedUrl = '';
   if (fs.existsSync(CONFIG_STORE_PATH)) {
     const configData = JSON.parse(fs.readFileSync(CONFIG_STORE_PATH, 'utf-8'));
-    if (configData && configData.googleScriptUrl) {
-      process.env.GOOGLE_SCRIPT_URL = configData.googleScriptUrl;
-      console.log(`[Express API] Loaded GOOGLE_SCRIPT_URL from config-settings.json: ${process.env.GOOGLE_SCRIPT_URL}`);
+    if (configData && configData.googleScriptUrl) loadedUrl = configData.googleScriptUrl;
+  }
+  
+  if (!loadedUrl) {
+    const localConfig = path.join(process.cwd(), 'config-settings.json');
+    if (fs.existsSync(localConfig)) {
+      const configData = JSON.parse(fs.readFileSync(localConfig, 'utf-8'));
+      if (configData && configData.googleScriptUrl) loadedUrl = configData.googleScriptUrl;
     }
+  }
+
+  if (!loadedUrl) {
+    const altConfig = path.resolve(__dirname, '..', 'config-settings.json');
+    if (fs.existsSync(altConfig)) {
+      const configData = JSON.parse(fs.readFileSync(altConfig, 'utf-8'));
+      if (configData && configData.googleScriptUrl) loadedUrl = configData.googleScriptUrl;
+    }
+  }
+
+  if (loadedUrl && !process.env.GOOGLE_SCRIPT_URL) {
+    process.env.GOOGLE_SCRIPT_URL = loadedUrl;
+    console.log(`[Express API] Loaded GOOGLE_SCRIPT_URL from config-settings.json: ${process.env.GOOGLE_SCRIPT_URL}`);
   }
 } catch (e) {
   console.warn('[Express API] Gagal memuat config-settings.json di awal:', e);
@@ -199,8 +218,47 @@ try {
   console.warn('[Express API] Gagal membaca data-store.json seed:', e);
 }
 
+const DEFAULT_MASTER_PELANGGARAN: Pelanggaran[] = [
+  // Kategori Ringan (Poin 5 - 15)
+  { id: 'P_P01', kode: 'P01', namaPelanggaran: 'Terlambat masuk sekolah / kelas (< 15 menit)', kategori: 'Ringan', poin: 5 },
+  { id: 'P_P02', kode: 'P02', namaPelanggaran: 'Terlambat masuk sekolah (> 15 menit)', kategori: 'Ringan', poin: 10 },
+  { id: 'P_P03', kode: 'P03', namaPelanggaran: 'Tidak memakai atribut seragam lengkap (topi/dasi/ikat pinggang/kaos kaki)', kategori: 'Ringan', poin: 5 },
+  { id: 'P_P04', kode: 'P04', namaPelanggaran: 'Memakai seragam tidak sesuai ketentuan hari / baju tidak dimasukkan / tidak rapi', kategori: 'Ringan', poin: 5 },
+  { id: 'P_P05', kode: 'P05', namaPelanggaran: 'Rambut gondrong / diwarnai / tidak sesuai ketentuan sekolah', kategori: 'Ringan', poin: 10 },
+  { id: 'P_P06', kode: 'P06', namaPelanggaran: 'Membuang sampah sembarangan di lingkungan sekolah', kategori: 'Ringan', poin: 5 },
+  { id: 'P_P07', kode: 'P07', namaPelanggaran: 'Menggunakan HP / gadget tanpa izin guru saat jam pelajaran (KBM)', kategori: 'Ringan', poin: 10 },
+  { id: 'P_P08', kode: 'P08', namaPelanggaran: 'Makan / minum di dalam kelas saat kegiatan belajar mengajar berlangsung', kategori: 'Ringan', poin: 5 },
+  { id: 'P_P09', kode: 'P09', namaPelanggaran: 'Memakai make-up / perhiasan berlebihan / bertato / bertindik (putra)', kategori: 'Ringan', poin: 10 },
+  { id: 'P_P10', kode: 'P10', namaPelanggaran: 'Tidak membawa buku pelajaran / tidak mengerjakan tugas sekolah', kategori: 'Ringan', poin: 5 },
+  { id: 'P_P11', kode: 'P11', namaPelanggaran: 'Keluar kelas tanpa izin guru piket / guru pengajar saat KBM', kategori: 'Ringan', poin: 5 },
+  { id: 'P_P12', kode: 'P12', namaPelanggaran: 'Tidak mengikuti upacara bendera / apel pagi / pembiasaan tanpa izin', kategori: 'Ringan', poin: 15 },
+
+  // Kategori Sedang (Poin 20 - 40)
+  { id: 'P_P13', kode: 'P13', namaPelanggaran: 'Tidak masuk sekolah tanpa keterangan / Alpa (1 hari)', kategori: 'Sedang', poin: 20 },
+  { id: 'P_P14', kode: 'P14', namaPelanggaran: 'Meninggalkan sekolah sebelum jam pelajaran usai tanpa izin (Membolos)', kategori: 'Sedang', poin: 25 },
+  { id: 'P_P15', kode: 'P15', namaPelanggaran: 'Melompati pagar / jendela / pintu gerbang sekolah', kategori: 'Sedang', poin: 30 },
+  { id: 'P_P16', kode: 'P16', namaPelanggaran: 'Mencontek / berbuat curang saat ulangan / ujian semester', kategori: 'Sedang', poin: 25 },
+  { id: 'P_P17', kode: 'P17', namaPelanggaran: 'Bersikap tidak sopan / membantah / menentang guru atau staf sekolah', kategori: 'Sedang', poin: 30 },
+  { id: 'P_P18', kode: 'P18', namaPelanggaran: 'Membawa / merokok / rokok elektrik (vape) di lingkungan sekolah', kategori: 'Sedang', poin: 35 },
+  { id: 'P_P19', kode: 'P19', namaPelanggaran: 'Mencoret-coret dinding, meja, kursi, merusak fasilitas sekolah (Vandalisme)', kategori: 'Sedang', poin: 25 },
+  { id: 'P_P20', kode: 'P20', namaPelanggaran: 'Mengendarai motor knalpot bising / ugal-ugalan di area sekolah', kategori: 'Sedang', poin: 25 },
+  { id: 'P_P21', kode: 'P21', namaPelanggaran: 'Mengintimidasi / mengejek / mengancam sesama siswa (Bullying verbal)', kategori: 'Sedang', poin: 35 },
+  { id: 'P_P22', kode: 'P22', namaPelanggaran: 'Membawa barang terlarang / bermain judi / kartu di sekolah', kategori: 'Sedang', poin: 20 },
+
+  // Kategori Berat (Poin 50 - 100)
+  { id: 'P_P23', kode: 'P23', namaPelanggaran: 'Terlibat perkelahian / tawuran antar siswa atau antar sekolah', kategori: 'Berat', poin: 75 },
+  { id: 'P_P24', kode: 'P24', namaPelanggaran: 'Membawa senjata tajam (sajam) / senjata api / benda berbahaya ke sekolah', kategori: 'Berat', poin: 75 },
+  { id: 'P_P25', kode: 'P25', namaPelanggaran: 'Melakukan pemalakan / pemerasan / pencurian uang atau barang milik orang lain', kategori: 'Berat', poin: 50 },
+  { id: 'P_P26', kode: 'P26', namaPelanggaran: 'Membawa / mengonsumsi / mengedarkan minuman keras / alkohol', kategori: 'Berat', poin: 75 },
+  { id: 'P_P27', kode: 'P27', namaPelanggaran: 'Membawa / menggunakan / mengedarkan narkoba atau obat-obatan terlarang', kategori: 'Berat', poin: 100 },
+  { id: 'P_P28', kode: 'P28', namaPelanggaran: 'Melakukan pelecehan seksual / perbuatan asusila di lingkungan sekolah', kategori: 'Berat', poin: 100 },
+  { id: 'P_P29', kode: 'P29', namaPelanggaran: 'Melakukan kekerasan fisik (Bullying fisik) yang mencederai orang lain', kategori: 'Berat', poin: 75 },
+  { id: 'P_P30', kode: 'P30', namaPelanggaran: 'Menyebarkan konten pornografi / mencemarkan nama baik sekolah di media sosial', kategori: 'Berat', poin: 75 },
+  { id: 'P_P31', kode: 'P31', namaPelanggaran: 'Memalsukan tanda tangan kepala sekolah / guru / surat izin sekolah', kategori: 'Berat', poin: 50 }
+];
+
 const initialSiswa: Siswa[] = seedDbData.siswa || [];
-const initialPelanggaran: Pelanggaran[] = seedDbData.pelanggaran || [];
+const initialPelanggaran: Pelanggaran[] = (seedDbData.pelanggaran && seedDbData.pelanggaran.length > 0) ? seedDbData.pelanggaran : DEFAULT_MASTER_PELANGGARAN;
 const initialPencatatan: Pencatatan[] = seedDbData.pencatatan || [];
 const initialPembinaan: Pembinaan[] = seedDbData.pembinaan || [];
 const initialKehadiran: KehadiranData[] = seedDbData.kehadiran || [];
@@ -246,7 +304,9 @@ function sanitizeAndDeduplicate(db: DBStructure): DBStructure {
   const seenKode = new Set<string>();
   const seenNamaPelanggaran = new Set<string>();
 
-  (db.pelanggaran || []).forEach(v => {
+  const violationsSource = (db.pelanggaran && db.pelanggaran.length > 0) ? db.pelanggaran : DEFAULT_MASTER_PELANGGARAN;
+
+  violationsSource.forEach(v => {
     if (!v) return;
     const cleanKode = String(v.kode || '').trim().toUpperCase();
     const cleanNama = String(v.namaPelanggaran || '').trim();
@@ -269,6 +329,10 @@ function sanitizeAndDeduplicate(db: DBStructure): DBStructure {
       poin: Number(v.poin) || 0
     });
   });
+
+  if (uniquePelanggaran.length === 0) {
+    uniquePelanggaran.push(...DEFAULT_MASTER_PELANGGARAN);
+  }
 
   // 3. Filter records (Pencatatan): remove dummy ones and only keep for active students
   const activeStudentNis = new Set(uniqueSiswa.map(s => s.nis));
@@ -527,7 +591,7 @@ async function proxyToGoogleScript(action: string, method: 'GET' | 'POST', body:
 
   // Handle existing query parameters in GOOGLE_SCRIPT_URL robustly
   const separator = scriptUrl.includes('?') ? '&' : '?';
-  let currentUrl = `${scriptUrl}${separator}action=${action}`;
+  let currentUrl = `${scriptUrl}${separator}action=${encodeURIComponent(action)}`;
   let currentMethod: 'GET' | 'POST' = method;
 
   const headers: Record<string, string> = {
@@ -536,16 +600,15 @@ async function proxyToGoogleScript(action: string, method: 'GET' | 'POST', body:
 
   let requestBody: string | undefined = undefined;
   if (method === 'POST') {
-    headers['Content-Type'] = 'application/json';
-    if (body) {
-      // Send both the nested "data" format and the flat "action" format for maximum compatibility and safety
-      const payload = {
-        action: action,
-        data: body,
-        ...(typeof body === 'object' && !Array.isArray(body) ? body : {})
-      };
-      requestBody = JSON.stringify(payload);
-    }
+    // Send as text/plain to prevent CORS preflight issues and guarantee GAS e.postData.contents parsing
+    headers['Content-Type'] = 'text/plain;charset=utf-8';
+    
+    // Structure payload with action both at root and inside wrapper
+    const payload = {
+      action: action,
+      data: body !== undefined && body !== null ? body : {}
+    };
+    requestBody = JSON.stringify(payload);
   }
 
   let attempts = 0;
@@ -820,8 +883,10 @@ apiRouter.get('/data', async (req, res) => {
   switch (action) {
     case 'getStudents':
       return res.json({ success: true, data: db.siswa });
-    case 'getViolations':
-      return res.json({ success: true, data: db.pelanggaran });
+    case 'getViolations': {
+      const list = (db.pelanggaran && db.pelanggaran.length > 0) ? db.pelanggaran : DEFAULT_MASTER_PELANGGARAN;
+      return res.json({ success: true, data: list });
+    }
     case 'getRecords':
       return res.json({ 
         success: true, 
@@ -1066,17 +1131,22 @@ apiRouter.post('/data', async (req, res) => {
           return res.status(500).json({ success: false, message: 'Gagal mengambil data dari Google Sheet.' });
         }
 
+        const localDb = readDB();
         const newDb: DBStructure = {
-          siswa: [...(studentRes.data || []), ...(db.siswa || [])],
-          pelanggaran: (violationRes.data && violationRes.data.length > 0) ? violationRes.data : (db.pelanggaran || []),
+          siswa: (studentRes.data && studentRes.data.length > 0) ? studentRes.data : (localDb.siswa || []),
+          pelanggaran: (violationRes.data && violationRes.data.length > 0) ? violationRes.data : (localDb.pelanggaran || []),
           pencatatan: recordRes.data?.pencatatan || [],
           pembinaan: recordRes.data?.pembinaan || [],
-          kehadiran: (kehadiranRes && kehadiranRes.success && Array.isArray(kehadiranRes.data)) ? kehadiranRes.data : (db.kehadiran || [])
+          kehadiran: (kehadiranRes && kehadiranRes.success && Array.isArray(kehadiranRes.data)) ? kehadiranRes.data : (localDb.kehadiran || [])
         };
 
         const sanitized = sanitizeAndDeduplicate(newDb);
         writeDB(sanitized);
-        return res.json({ success: true, message: 'Berhasil menarik data terbaru dari Google Sheet ke aplikasi.', data: sanitized });
+        return res.json({ 
+          success: true, 
+          message: `Berhasil menarik ${sanitized.siswa.length} data siswa dan seluruh data catatan dari Google Sheet ke aplikasi.`, 
+          data: sanitized 
+        });
       } catch (err: any) {
         return res.status(500).json({ success: false, message: 'Gagal menyinkronkan data: ' + err.message });
       }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Siswa, Pelanggaran, User } from '../types';
 import { AlertCircle, Calendar, UserCheck, ShieldAlert, FileText, CheckCircle2, Filter, ChevronDown, GraduationCap, Search, X } from 'lucide-react';
+import { DEFAULT_MASTER_PELANGGARAN } from '../utils/defaultViolations';
 
 interface InputPelanggaranFormProps {
   siswa: Siswa[];
@@ -22,6 +23,11 @@ export default function InputPelanggaranForm({
   currentUser,
   onAddRecord
 }: InputPelanggaranFormProps) {
+  // Always guarantee violations are never empty
+  const activeViolations = useMemo(() => {
+    if (violations && violations.length > 0) return violations;
+    return DEFAULT_MASTER_PELANGGARAN;
+  }, [violations]);
   
   // Form states
   const [selectedNis, setSelectedNis] = useState('');
@@ -62,7 +68,7 @@ export default function InputPelanggaranForm({
 
   // Find active selected objects for real-time calculations
   const selectedStudentObj = siswa.find(s => s.nis === selectedNis);
-  const selectedViolationObj = violations.find(v => v.namaPelanggaran === selectedViolationName);
+  const selectedViolationObj = activeViolations.find(v => v.namaPelanggaran === selectedViolationName);
 
   // Sync selectedClass when student is selected
   useEffect(() => {
@@ -377,19 +383,50 @@ export default function InputPelanggaranForm({
 
           {/* 2. SELECT VIOLATION */}
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">2. Jenis Pelanggaran</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">2. Jenis Pelanggaran (Dropdown Pilihan) *</label>
+              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 font-mono">
+                {activeViolations.length} Aturan Pelanggaran
+              </span>
+            </div>
             <select
               id="violation-select"
               value={selectedViolationName}
               onChange={(e) => setSelectedViolationName(e.target.value)}
-              className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl outline-none transition-all bg-white"
+              className="w-full px-4 py-2.5 text-sm bg-white border border-slate-200 focus:border-blue-500 rounded-xl outline-none transition-all font-medium text-slate-800 cursor-pointer shadow-sm"
             >
-              <option value="">-- Pilih Aturan Pelanggaran --</option>
-              {violations.map(v => (
-                <option key={v.id} value={v.namaPelanggaran}>
-                  [{v.kode}] {v.namaPelanggaran} ({v.poin} Poin - {v.kategori})
-                </option>
-              ))}
+              <option value="">-- Pilih Aturan Pelanggaran ({activeViolations.length} Pilihan) --</option>
+              <optgroup label="--- PELANGGARAN RINGAN (5 - 15 Poin) ---">
+                {activeViolations.filter(v => v.kategori === 'Ringan').map(v => (
+                  <option key={v.id || v.kode} value={v.namaPelanggaran}>
+                    [{v.kode}] {v.namaPelanggaran} ({v.poin} Poin)
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="--- PELANGGARAN SEDANG (20 - 40 Poin) ---">
+                {activeViolations.filter(v => v.kategori === 'Sedang').map(v => (
+                  <option key={v.id || v.kode} value={v.namaPelanggaran}>
+                    [{v.kode}] {v.namaPelanggaran} ({v.poin} Poin)
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="--- PELANGGARAN BERAT (50 - 100 Poin) ---">
+                {activeViolations.filter(v => v.kategori === 'Berat').map(v => (
+                  <option key={v.id || v.kode} value={v.namaPelanggaran}>
+                    [{v.kode}] {v.namaPelanggaran} ({v.poin} Poin)
+                  </option>
+                ))}
+              </optgroup>
+              {/* Fallback for custom added violations with other category values */}
+              {activeViolations.filter(v => !['Ringan', 'Sedang', 'Berat'].includes(v.kategori)).length > 0 && (
+                <optgroup label="--- PELANGGARAN LAINNYA ---">
+                  {activeViolations.filter(v => !['Ringan', 'Sedang', 'Berat'].includes(v.kategori)).map(v => (
+                    <option key={v.id || v.kode} value={v.namaPelanggaran}>
+                      [{v.kode}] {v.namaPelanggaran} ({v.poin} Poin - {v.kategori})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
 
