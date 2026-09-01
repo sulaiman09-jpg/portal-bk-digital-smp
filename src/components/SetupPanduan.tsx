@@ -149,6 +149,11 @@ export default function SetupPanduan() {
     const isBlocked = errorText.includes('<!DOCTYPE') || 
                       errorText.includes('html') || 
                       errorText.includes('Failed to parse Google Apps Script response') ||
+                      errorText.includes('Google memblokir') ||
+                      errorText.includes('belajar.id') ||
+                      errorText.includes('otorisasi') ||
+                      errorText.includes('Otorisasi') ||
+                      errorText.includes('Gagal terhubung ke Google Sheets') ||
                       errorText.includes('window[\'ppConfig\']') ||
                       errorText.includes('deleteIsEnforced') ||
                       errorText.includes('sealIsEnforced');

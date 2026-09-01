@@ -432,7 +432,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
   const [kehadiranList, setKehadiranList] = useState<KehadiranData[]>([]);
   const [snbpList, setSnbpList] = useState<SnbpData[]>([]);
   const [searchKehadiranQuery, setSearchKehadiranQuery] = useState('');
-  const [isSyncingKehadiran, setIsSyncingKehadiran] = useState(false);
+  const [isSyncingAll, setIsSyncingAll] = useState(false);
 
   // Toast notifier
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -441,24 +441,55 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Function to refresh attendance from server/Google Sheets
-  const refreshKehadiranFromServer = async () => {
-    setIsSyncingKehadiran(true);
+  // Function to refresh all BK data from server / Google Sheets
+  const refreshAllBKFromServer = async () => {
+    setIsSyncingAll(true);
     try {
-      const res = await googleSheetApi.getKehadiran();
-      if (res.success && Array.isArray(res.data)) {
-        const filtered = res.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
-        setKehadiranList(filtered);
-        localStorage.setItem(`bk_kehadiran_${classNameFilter}`, JSON.stringify(filtered));
+      const [kRes, aRes, vRes, hRes, sRes] = await Promise.all([
+        googleSheetApi.getKonseling(),
+        googleSheetApi.getAsesmen(),
+        googleSheetApi.getKunjungan(),
+        googleSheetApi.getKehadiran(),
+        googleSheetApi.getSnbp()
+      ]);
+
+      if (kRes.success && Array.isArray(kRes.data)) {
+        const filteredK = kRes.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setKonselingList(filteredK);
+        localStorage.setItem(`bk_konseling_${classNameFilter}`, JSON.stringify(filteredK));
+      }
+
+      if (aRes.success && Array.isArray(aRes.data)) {
+        const filteredA = aRes.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setAsesmenList(filteredA);
+        localStorage.setItem(`bk_asesmen_${classNameFilter}`, JSON.stringify(filteredA));
+      }
+
+      if (vRes.success && Array.isArray(vRes.data)) {
+        const filteredV = vRes.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setKunjunganList(filteredV);
+        localStorage.setItem(`bk_kunjungan_${classNameFilter}`, JSON.stringify(filteredV));
+      }
+
+      if (hRes.success && Array.isArray(hRes.data)) {
+        const filteredH = hRes.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setKehadiranList(filteredH);
+        localStorage.setItem(`bk_kehadiran_${classNameFilter}`, JSON.stringify(filteredH));
+      }
+
+      if (sRes.success && Array.isArray(sRes.data)) {
+        const filteredS = sRes.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setSnbpList(filteredS);
+        localStorage.setItem(`bk_snbp_${classNameFilter}`, JSON.stringify(filteredS));
       }
     } catch (err) {
-      console.warn('Gagal memuat rekap kehadiran dari server/sheet:', err);
+      console.warn('Gagal memuat data BK dari server/Google Sheets:', err);
     } finally {
-      setIsSyncingKehadiran(false);
+      setIsSyncingAll(false);
     }
   };
 
-  // Load initial datasets from localStorage and server
+  // Load initial datasets from localStorage and then sync with server
   useEffect(() => {
     const storedKonseling = localStorage.getItem(`bk_konseling_${classNameFilter}`);
     const storedAsesmen = localStorage.getItem(`bk_asesmen_${classNameFilter}`);
@@ -481,8 +512,8 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     if (storedSnbp) setSnbpList(JSON.parse(storedSnbp));
     else setSnbpList([]);
 
-    // Asynchronously fetch latest attendance from server / Google Sheets
-    refreshKehadiranFromServer();
+    // Asynchronously fetch latest BK records from server / Google Sheets
+    refreshAllBKFromServer();
 
     setSearchKehadiranQuery('');
 
@@ -577,7 +608,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     tindakLanjut: ''
   });
 
-  const handleAddKonseling = (e: React.FormEvent) => {
+  const handleAddKonseling = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formKonseling.nis) {
       showLocalToast('Pilih siswa terlebih dahulu!', 'error');
@@ -602,7 +633,8 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
 
     saveKonseling([newKonseling, ...konselingList]);
     showLocalToast('Berhasil menambahkan catatan konseling siswa.');
-    // Reset
+
+    // Reset form
     setFormKonseling({
       nis: '',
       jenisKonseling: 'Individu',
@@ -613,12 +645,35 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
       hasilEvaluasi: '',
       tindakLanjut: ''
     });
+
+    // Persist to server / Google Sheets
+    try {
+      const res = await googleSheetApi.addKonseling(newKonseling);
+      if (res.success && Array.isArray(res.data)) {
+        const filtered = res.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setKonselingList(filtered);
+        localStorage.setItem(`bk_konseling_${classNameFilter}`, JSON.stringify(filtered));
+      }
+    } catch (err) {
+      console.warn('Gagal menyimpan konseling ke Google Sheets/server:', err);
+    }
   };
 
-  const handleDeleteKonseling = (id: string) => {
+  const handleDeleteKonseling = async (id: string) => {
     const updated = konselingList.filter(item => item.id !== id);
     saveKonseling(updated);
     showLocalToast('Catatan konseling berhasil dihapus.', 'success');
+
+    try {
+      const res = await googleSheetApi.deleteKonseling(id);
+      if (res.success && Array.isArray(res.data)) {
+        const filtered = res.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setKonselingList(filtered);
+        localStorage.setItem(`bk_konseling_${classNameFilter}`, JSON.stringify(filtered));
+      }
+    } catch (err) {
+      console.warn('Gagal menghapus konseling di server:', err);
+    }
   };
 
   // ------------------ 2. SUB-FITUR: ASESMEN BK ------------------
@@ -631,7 +686,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     minatBakat: ''
   });
 
-  const handleAddAsesmen = (e: React.FormEvent) => {
+  const handleAddAsesmen = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formAsesmen.nis) {
       showLocalToast('Pilih siswa terlebih dahulu!', 'error');
@@ -657,7 +712,8 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
 
     saveAsesmen([newAsesmen, ...filtered]);
     showLocalToast('Berhasil menyimpan data asesmen BK siswa.');
-    // Reset
+
+    // Reset form
     setFormAsesmen({
       nis: '',
       hasilAKPD: '',
@@ -666,12 +722,35 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
       psikotes: '',
       minatBakat: ''
     });
+
+    // Persist to server / Google Sheets
+    try {
+      const res = await googleSheetApi.addAsesmen(newAsesmen);
+      if (res.success && Array.isArray(res.data)) {
+        const filteredList = res.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setAsesmenList(filteredList);
+        localStorage.setItem(`bk_asesmen_${classNameFilter}`, JSON.stringify(filteredList));
+      }
+    } catch (err) {
+      console.warn('Gagal menyimpan asesmen ke server/Google Sheets:', err);
+    }
   };
 
-  const handleDeleteAsesmen = (id: string) => {
+  const handleDeleteAsesmen = async (id: string) => {
     const updated = asesmenList.filter(item => item.id !== id);
     saveAsesmen(updated);
     showLocalToast('Data asesmen kesiswaan berhasil dihapus.');
+
+    try {
+      const res = await googleSheetApi.deleteAsesmen(id);
+      if (res.success && Array.isArray(res.data)) {
+        const filteredList = res.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setAsesmenList(filteredList);
+        localStorage.setItem(`bk_asesmen_${classNameFilter}`, JSON.stringify(filteredList));
+      }
+    } catch (err) {
+      console.warn('Gagal menghapus data asesmen di server:', err);
+    }
   };
 
   // ------------------ 3. SUB-FITUR: KUNJUNGAN RUMAH ------------------
@@ -682,7 +761,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     hasilTemuan: ''
   });
 
-  const handleAddKunjungan = (e: React.FormEvent) => {
+  const handleAddKunjungan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formKunjungan.nis) {
       showLocalToast('Pilih siswa terlebih dahulu!', 'error');
@@ -703,18 +782,42 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
 
     saveKunjungan([newKunjungan, ...kunjunganList]);
     showLocalToast('Catatan kunjungan rumah (home visit) berhasil disimpan.');
+
     setFormKunjungan({
       nis: '',
       tanggalKunjungan: new Date().toISOString().split('T')[0],
       tujuanKunjungan: '',
       hasilTemuan: ''
     });
+
+    // Persist to server / Google Sheets
+    try {
+      const res = await googleSheetApi.addKunjungan(newKunjungan);
+      if (res.success && Array.isArray(res.data)) {
+        const filtered = res.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setKunjunganList(filtered);
+        localStorage.setItem(`bk_kunjungan_${classNameFilter}`, JSON.stringify(filtered));
+      }
+    } catch (err) {
+      console.warn('Gagal menyimpan kunjungan rumah ke server/Google Sheets:', err);
+    }
   };
 
-  const handleDeleteKunjungan = (id: string) => {
+  const handleDeleteKunjungan = async (id: string) => {
     const updated = kunjunganList.filter(item => item.id !== id);
     saveKunjungan(updated);
     showLocalToast('Catatan kunjungan rumah berhasil dihapus.');
+
+    try {
+      const res = await googleSheetApi.deleteKunjungan(id);
+      if (res.success && Array.isArray(res.data)) {
+        const filtered = res.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setKunjunganList(filtered);
+        localStorage.setItem(`bk_kunjungan_${classNameFilter}`, JSON.stringify(filtered));
+      }
+    } catch (err) {
+      console.warn('Gagal menghapus data kunjungan rumah di server:', err);
+    }
   };
 
   // Helper helper to generate Word .doc file
@@ -1612,7 +1715,7 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
     catatan: ''
   });
 
-  const handleAddSnbp = (e: React.FormEvent) => {
+  const handleAddSnbp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formSnbp.nis) {
       showLocalToast('Pilih siswa terlebih dahulu!', 'error');
@@ -1649,12 +1752,35 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
       tahun: new Date().getFullYear().toString(),
       catatan: ''
     });
+
+    // Persist to server / Google Sheets
+    try {
+      const res = await googleSheetApi.addSnbp(newSnbp);
+      if (res.success && Array.isArray(res.data)) {
+        const filtered = res.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setSnbpList(filtered);
+        localStorage.setItem(`bk_snbp_${classNameFilter}`, JSON.stringify(filtered));
+      }
+    } catch (err) {
+      console.warn('Gagal menyimpan data SNBP di server/Google Sheets:', err);
+    }
   };
 
-  const handleDeleteSnbp = (id: string) => {
+  const handleDeleteSnbp = async (id: string) => {
     const updated = snbpList.filter(item => item.id !== id);
     saveSnbp(updated);
     showLocalToast('Laporan SNBP berhasil dihapus.', 'success');
+
+    try {
+      const res = await googleSheetApi.deleteSnbp(id);
+      if (res.success && Array.isArray(res.data)) {
+        const filtered = res.data.filter(item => belongsToSchool(item.kelas, classNameFilter));
+        setSnbpList(filtered);
+        localStorage.setItem(`bk_snbp_${classNameFilter}`, JSON.stringify(filtered));
+      }
+    } catch (err) {
+      console.warn('Gagal menghapus data SNBP di server:', err);
+    }
   };
 
   const handleExportSnbpPDF = () => {
@@ -1819,13 +1945,32 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
 
       {/* Header section with badge */}
       <div className="border-b border-slate-100 pb-5 space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-extrabold uppercase rounded-full border border-indigo-100">
-            Unit Bimbingan Konseling (BK)
-          </span>
-          <span className="text-xs text-slate-400 font-mono font-bold">Lokal Database</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-extrabold uppercase rounded-full border border-indigo-100">
+              Unit Bimbingan Konseling (BK)
+            </span>
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+              Tersinkron Google Sheets
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={refreshAllBKFromServer}
+            disabled={isSyncingAll}
+            className={`flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer border border-slate-200 ${
+              isSyncingAll ? 'opacity-60 cursor-not-allowed' : ''
+            }`}
+            title="Tarik data BK terbaru dari Google Sheets"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAll ? 'animate-spin text-indigo-600' : ''}`} />
+            <span>{isSyncingAll ? 'Menyinkronkan...' : 'Sinkronkan Data BK'}</span>
+          </button>
         </div>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
           <div>
             <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 tracking-tight">
               <BookOpen className="w-6 h-6 text-indigo-600" />
@@ -2677,13 +2822,13 @@ export default function LayananBK({ siswa, classNameFilter, currentUser }: Layan
                       <h3 className="font-extrabold text-slate-800 text-sm">Riwayat Rekapitulasi Presensi Mingguan</h3>
                       <button
                         type="button"
-                        onClick={refreshKehadiranFromServer}
-                        disabled={isSyncingKehadiran}
+                        onClick={refreshAllBKFromServer}
+                        disabled={isSyncingAll}
                         className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-full transition-colors cursor-pointer"
                         title="Sinkronkan dengan Google Sheets & Database"
                       >
-                        <RefreshCw className={`w-3 h-3 text-emerald-600 ${isSyncingKehadiran ? 'animate-spin' : ''}`} />
-                        <span>{isSyncingKehadiran ? 'Sinkronisasi...' : 'Tersinkron Sheet'}</span>
+                        <RefreshCw className={`w-3 h-3 text-emerald-600 ${isSyncingAll ? 'animate-spin' : ''}`} />
+                        <span>{isSyncingAll ? 'Sinkronisasi...' : 'Tersinkron Sheet'}</span>
                       </button>
                     </div>
                     

@@ -56,6 +56,56 @@ export interface KehadiranData {
   keterangan: string;
 }
 
+export interface KonselingData {
+  id: string;
+  nis: string;
+  namaSiswa: string;
+  kelas: string;
+  jenisKonseling: 'Individu' | 'Kelompok' | 'Klasikal';
+  tanggal: string;
+  permasalahanUtama: string;
+  analisisBK: string;
+  solusiRekomendasi: string;
+  hasilEvaluasi: string;
+  tindakLanjut: string;
+  petugas?: string;
+}
+
+export interface AsesmenData {
+  id: string;
+  nis: string;
+  namaSiswa: string;
+  kelas: string;
+  hasilAKPD: string;
+  gayaBelajar: string;
+  aum: string;
+  psikotes: string;
+  minatBakat: string;
+}
+
+export interface KunjunganRumahData {
+  id: string;
+  nis: string;
+  namaSiswa: string;
+  kelas: string;
+  tanggalKunjungan: string;
+  tujuanKunjungan: string;
+  hasilTemuan: string;
+  petugas?: string;
+}
+
+export interface SnbpData {
+  id: string;
+  nis: string;
+  namaSiswa: string;
+  kelas: string;
+  namaUniversitas: string;
+  programStudi: string;
+  keteranganLulus: 'Lulus' | 'Tidak Lulus';
+  tahun: string;
+  catatan?: string;
+}
+
 export type Role = 'Admin' | 'Guru BK' | 'Guru Piket';
 
 export interface User {

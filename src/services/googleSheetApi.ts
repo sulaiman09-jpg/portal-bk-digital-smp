@@ -1,4 +1,4 @@
-import { Siswa, Pelanggaran, Pencatatan, Pembinaan, KehadiranData, AuthResponse, ApiResponse } from '../types';
+import { Siswa, Pelanggaran, Pencatatan, Pembinaan, KehadiranData, KonselingData, AsesmenData, KunjunganRumahData, SnbpData, AuthResponse, ApiResponse } from '../types';
 
 // Helper to get active auth token and Google Script URL for stateless serverless environments like Vercel
 function getAuthHeaders(): Record<string, string> {
@@ -75,9 +75,10 @@ export const googleSheetApi = {
 
   // Save config URL
   async saveConfig(googleScriptUrl: string): Promise<ApiResponse<any>> {
+    const cleanUrl = (googleScriptUrl || '').trim();
     try {
-      if (googleScriptUrl) {
-        localStorage.setItem('google_script_url', googleScriptUrl);
+      if (cleanUrl) {
+        localStorage.setItem('google_script_url', cleanUrl);
       } else {
         localStorage.removeItem('google_script_url');
       }
@@ -85,12 +86,20 @@ export const googleSheetApi = {
       const response = await fetch('/api/settings/config', {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ googleScriptUrl })
+        body: JSON.stringify({ googleScriptUrl: cleanUrl })
       });
-      return await response.json();
-    } catch (error) {
+      
+      const data = await response.json().catch(() => null);
+      if (data) {
+        return data;
+      }
+      return { 
+        success: response.ok, 
+        message: response.ok ? 'Konfigurasi berhasil disimpan.' : `Gagal menyimpan konfigurasi (Status: ${response.status})` 
+      };
+    } catch (error: any) {
       console.error('Save config error:', error);
-      return { success: false, message: 'Gagal menyimpan konfigurasi.' };
+      return { success: false, message: error?.message || 'Gagal menyimpan konfigurasi.' };
     }
   },
 
@@ -258,7 +267,168 @@ export const googleSheetApi = {
     }
   },
 
-  // 7. Data Synchronization APIs
+  // 7. Layanan BK APIs (Konseling, Asesmen, Kunjungan Rumah, SNBP)
+  async getKonseling(): Promise<ApiResponse<KonselingData[]>> {
+    try {
+      const response = await fetch('/api/data?action=getKonseling', {
+        headers: getAuthHeaders()
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Fetch konseling error:', error);
+      return { success: false, message: 'Gagal mengambil data konseling.' };
+    }
+  },
+
+  async addKonseling(data: Partial<KonselingData> & { nis: string; namaSiswa: string; kelas: string }): Promise<ApiResponse<KonselingData[]>> {
+    try {
+      const response = await fetch('/api/data?action=addKonseling', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Add konseling error:', error);
+      return { success: false, message: 'Gagal menyimpan data konseling.' };
+    }
+  },
+
+  async deleteKonseling(id: string): Promise<ApiResponse<KonselingData[]>> {
+    try {
+      const response = await fetch('/api/data?action=deleteKonseling', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ id })
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Delete konseling error:', error);
+      return { success: false, message: 'Gagal menghapus data konseling.' };
+    }
+  },
+
+  async getAsesmen(): Promise<ApiResponse<AsesmenData[]>> {
+    try {
+      const response = await fetch('/api/data?action=getAsesmen', {
+        headers: getAuthHeaders()
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Fetch asesmen error:', error);
+      return { success: false, message: 'Gagal mengambil data asesmen.' };
+    }
+  },
+
+  async addAsesmen(data: Partial<AsesmenData> & { nis: string; namaSiswa: string; kelas: string }): Promise<ApiResponse<AsesmenData[]>> {
+    try {
+      const response = await fetch('/api/data?action=addAsesmen', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Add asesmen error:', error);
+      return { success: false, message: 'Gagal menyimpan data asesmen.' };
+    }
+  },
+
+  async deleteAsesmen(id: string): Promise<ApiResponse<AsesmenData[]>> {
+    try {
+      const response = await fetch('/api/data?action=deleteAsesmen', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ id })
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Delete asesmen error:', error);
+      return { success: false, message: 'Gagal menghapus data asesmen.' };
+    }
+  },
+
+  async getKunjungan(): Promise<ApiResponse<KunjunganRumahData[]>> {
+    try {
+      const response = await fetch('/api/data?action=getKunjungan', {
+        headers: getAuthHeaders()
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Fetch kunjungan error:', error);
+      return { success: false, message: 'Gagal mengambil data kunjungan rumah.' };
+    }
+  },
+
+  async addKunjungan(data: Partial<KunjunganRumahData> & { nis: string; namaSiswa: string; kelas: string }): Promise<ApiResponse<KunjunganRumahData[]>> {
+    try {
+      const response = await fetch('/api/data?action=addKunjungan', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Add kunjungan error:', error);
+      return { success: false, message: 'Gagal menyimpan data kunjungan rumah.' };
+    }
+  },
+
+  async deleteKunjungan(id: string): Promise<ApiResponse<KunjunganRumahData[]>> {
+    try {
+      const response = await fetch('/api/data?action=deleteKunjungan', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ id })
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Delete kunjungan error:', error);
+      return { success: false, message: 'Gagal menghapus data kunjungan rumah.' };
+    }
+  },
+
+  async getSnbp(): Promise<ApiResponse<SnbpData[]>> {
+    try {
+      const response = await fetch('/api/data?action=getSnbp', {
+        headers: getAuthHeaders()
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Fetch SNBP error:', error);
+      return { success: false, message: 'Gagal mengambil data SNBP.' };
+    }
+  },
+
+  async addSnbp(data: Partial<SnbpData> & { nis: string; namaSiswa: string; kelas: string }): Promise<ApiResponse<SnbpData[]>> {
+    try {
+      const response = await fetch('/api/data?action=addSnbp', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Add SNBP error:', error);
+      return { success: false, message: 'Gagal menyimpan data SNBP.' };
+    }
+  },
+
+  async deleteSnbp(id: string): Promise<ApiResponse<SnbpData[]>> {
+    try {
+      const response = await fetch('/api/data?action=deleteSnbp', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ id })
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Delete SNBP error:', error);
+      return { success: false, message: 'Gagal menghapus data SNBP.' };
+    }
+  },
+
+  // 8. Data Synchronization APIs
   async syncPull(): Promise<ApiResponse<any>> {
     try {
       const response = await fetch('/api/data?action=syncPull', {
