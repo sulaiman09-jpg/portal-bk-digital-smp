@@ -43,6 +43,13 @@ export interface Pembinaan {
   totalPoin: number;
   tindakan: string;
   tanggal: string;
+  targetPembinaan?: string;
+  rencanaTindakLanjut?: string;
+  indikator?: string;
+  tenggatWaktu?: string;
+  status?: string;
+  catatan?: string;
+  petugas?: string;
 }
 
 export interface ActionPlan {

@@ -35,6 +35,9 @@ interface RiwayatSiswaDetailProps {
   currentUser?: { nama: string; role: Role };
   onDeleteRecord: (id: string) => Promise<boolean>;
   selectedNisFromOutside?: string; // Support navigating directly from dashboard click
+  onAddPembinaan?: (newPembinaan: Pembinaan) => void;
+  onUpdatePembinaan?: (updated: Pembinaan) => void;
+  onDeletePembinaan?: (id: string) => void;
 }
 
 // Pre-defined guidance & counseling action plan templates based on real Indonesian school BK standards
@@ -94,6 +97,38 @@ const ACTION_PLAN_TEMPLATES: Array<{
   }
 ];
 
+// Quick presets for simple target input
+const QUICK_TARGET_PRESETS = [
+  {
+    label: '⏰ Disiplin Kehadiran 30 Hari',
+    judul: 'Target Pemulihan Disiplin Waktu & Absensi',
+    rencana: 'Hadir di sekolah sebelum 06.45 WIB, lapor mandiri di meja Guru Piket setiap pagi dan kontrol kartu absensi berkala.',
+    indikator: 'Hadir 100% tepat waktu tanpa terlambat & 0 alpa selama 30 hari berturut-turut.',
+    days: 30
+  },
+  {
+    label: '👔 Kerapian Seragam & Atribut',
+    judul: 'Target Pembiasaan Kerapian Seragam & Atribut Sekolah',
+    rencana: 'Pemeriksaan atribut lengkap (dasi, ikat pinggang, kaos kaki, rambut rapi) saat apel pagi oleh Wali Kelas/BK.',
+    indikator: 'Rambut rapi dan seragam lengkap sesuai tata tertib selama 21 hari masa pemantauan.',
+    days: 21
+  },
+  {
+    label: '🤝 Kontrak Perilaku & Sikap Santun',
+    judul: 'Kontrak Komitmen Sikap Santun & Etika Terhadap Guru',
+    rencana: 'Konseling individu dengan Guru BK setiap pekan dan evaluasi perilaku mingguan oleh 3 dewan guru.',
+    indikator: 'Tidak ada laporan perilaku tidak santun dan catatan evaluasi positif dari dewan guru.',
+    days: 30
+  },
+  {
+    label: '📚 Tanggung Jawab Belajar & KBM',
+    judul: 'Peningkatan Tanggung Jawab Belajar & Ketertiban Kelas',
+    rencana: 'Duduk di barisan depan kelas dan menyelesaikan seluruh tugas mata pelajaran tepat waktu.',
+    indikator: '100% tugas kelas terselesaikan dan tidak pernah meninggalkan jam pelajaran tanpa izin.',
+    days: 30
+  }
+];
+
 export default function RiwayatSiswaDetail({
   siswa,
   pencatatan,
@@ -101,12 +136,40 @@ export default function RiwayatSiswaDetail({
   userRole,
   currentUser,
   onDeleteRecord,
-  selectedNisFromOutside
+  selectedNisFromOutside,
+  onAddPembinaan,
+  onUpdatePembinaan,
+  onDeletePembinaan
 }: RiwayatSiswaDetailProps) {
   
   const [selectedNis, setSelectedNis] = useState(selectedNisFromOutside || '');
   const [searchQuery, setSearchQuery] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  // State Pembinaan lokal untuk menyimpan dan memantau perkembangan siswa secara terukur
+  const [pembinaanList, setPembinaanList] = useState<Pembinaan[]>(pembinaan);
+
+  useEffect(() => {
+    setPembinaanList(pembinaan);
+  }, [pembinaan]);
+
+  // Fitur Input Sederhana Target Pembinaan / Rencana Tindak Lanjut
+  const [isSimpleInputOpen, setIsSimpleInputOpen] = useState(false);
+  const [simpleTargetJudul, setSimpleTargetJudul] = useState('');
+  const [simpleTargetRencana, setSimpleTargetRencana] = useState('');
+  const [simpleTargetIndikator, setSimpleTargetIndikator] = useState('');
+  const [simpleTargetTenggat, setSimpleTargetTenggat] = useState('');
+  const [simpleTargetStatus, setSimpleTargetStatus] = useState<ActionPlanStatus>('Sedang Berjalan');
+  const [simpleTargetCatatan, setSimpleTargetCatatan] = useState('');
+  const [simpleTargetPetugas, setSimpleTargetPetugas] = useState(currentUser?.nama || 'Guru BK');
+  const [isSubmittingSimple, setIsSubmittingSimple] = useState(false);
+  const [simpleSuccessMsg, setSimpleSuccessMsg] = useState('');
+
+  // Evaluasi Pembinaan State
+  const [evalCoachingItem, setEvalCoachingItem] = useState<Pembinaan | null>(null);
+  const [evalCoachingStatus, setEvalCoachingStatus] = useState<ActionPlanStatus>('Sedang Berjalan');
+  const [evalCoachingNote, setEvalCoachingNote] = useState('');
+  const [isSavingCoachingEval, setIsSavingCoachingEval] = useState(false);
 
   // Action Plans States
   const [actionPlans, setActionPlans] = useState<ActionPlan[]>([]);
@@ -116,7 +179,7 @@ export default function RiwayatSiswaDetail({
   const [selectedPlanForEval, setSelectedPlanForEval] = useState<ActionPlan | null>(null);
   const [statusFilter, setStatusFilter] = useState<'Semua' | ActionPlanStatus>('Semua');
 
-  // Form states for creating Action Plan
+  // Form states for creating Action Plan Modal
   const [formJudul, setFormJudul] = useState('');
   const [formKategori, setFormKategori] = useState<ActionPlanKategori>('Kedisiplinan');
   const [formDeskripsi, setFormDeskripsi] = useState('');
@@ -127,7 +190,7 @@ export default function RiwayatSiswaDetail({
   const [formStatus, setFormStatus] = useState<ActionPlanStatus>('Direncanakan');
   const [isSavingPlan, setIsSavingPlan] = useState(false);
 
-  // Form states for updating evaluation
+  // Form states for updating evaluation Modal
   const [evalStatus, setEvalStatus] = useState<ActionPlanStatus>('Sedang Berjalan');
   const [evalNote, setEvalNote] = useState('');
   const [isSavingEval, setIsSavingEval] = useState(false);
@@ -174,9 +237,13 @@ export default function RiwayatSiswaDetail({
     ? pencatatan.filter(r => r.nis === selectedStudent.nis).sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime())
     : [];
 
-  const studentCoaching = selectedStudent
-    ? pembinaan.filter(p => p.nis === selectedStudent.nis).sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime())
-    : [];
+  // Filter pembinaan from the local pembinaan state so updates reflect immediately
+  const studentCoaching = useMemo(() => {
+    if (!selectedStudent) return [];
+    return pembinaanList
+      .filter(p => p.nis === selectedStudent.nis)
+      .sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
+  }, [pembinaanList, selectedStudent]);
 
   const totalPoints = studentRecords.reduce((sum, r) => sum + r.poin, 0);
 
@@ -234,6 +301,213 @@ export default function RiwayatSiswaDetail({
     setFormPembimbing(currentUser?.nama || 'Guru BK');
   };
 
+  // Quick apply template to simple input
+  const handleApplySimplePreset = (tpl: typeof QUICK_TARGET_PRESETS[0]) => {
+    const d = new Date();
+    d.setDate(d.getDate() + tpl.days);
+    const targetDateStr = d.toISOString().split('T')[0];
+
+    setSimpleTargetJudul(tpl.judul);
+    setSimpleTargetRencana(tpl.rencana);
+    setSimpleTargetIndikator(tpl.indikator);
+    setSimpleTargetTenggat(targetDateStr);
+    setSimpleTargetStatus('Sedang Berjalan');
+    setSimpleTargetPetugas(currentUser?.nama || 'Guru BK');
+  };
+
+  // Simpan Target Pembinaan / Rencana Tindak Lanjut ke State Pembinaan
+  const handleSaveSimpleTarget = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudent) return;
+    if (!simpleTargetJudul.trim()) {
+      alert('Mohon isi Judul Target Pembinaan atau Rencana Tindak Lanjut.');
+      return;
+    }
+
+    setIsSubmittingSimple(true);
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const newPembinaanItem: Pembinaan = {
+        id: 'PB-' + Date.now(),
+        nis: selectedStudent.nis,
+        namaSiswa: selectedStudent.nama,
+        totalPoin: totalPoints,
+        tindakan: simpleTargetJudul.trim(),
+        tanggal: todayStr,
+        targetPembinaan: simpleTargetJudul.trim(),
+        rencanaTindakLanjut: simpleTargetRencana.trim() || simpleTargetJudul.trim(),
+        indikator: simpleTargetIndikator.trim(),
+        tenggatWaktu: simpleTargetTenggat || '',
+        status: simpleTargetStatus,
+        catatan: simpleTargetCatatan.trim(),
+        petugas: simpleTargetPetugas.trim() || currentUser?.nama || 'Guru BK'
+      };
+
+      // 1. Simpan langsung ke state pembinaan lokal
+      setPembinaanList(prev => [newPembinaanItem, ...prev]);
+
+      // 2. Beritahukan state parent (App.tsx)
+      if (onAddPembinaan) {
+        onAddPembinaan(newPembinaanItem);
+      } else {
+        try {
+          const saved = localStorage.getItem('kesiswaan_custom_pembinaan');
+          const existing: Pembinaan[] = saved ? JSON.parse(saved) : [];
+          localStorage.setItem('kesiswaan_custom_pembinaan', JSON.stringify([newPembinaanItem, ...existing]));
+        } catch (e) {
+          console.warn('Gagal simpan ke localStorage:', e);
+        }
+      }
+
+      // 3. Sinkronkan juga ke actionPlans agar modul rehabilitasi terisi menyeluruh
+      try {
+        const newPlan: Partial<ActionPlan> = {
+          id: newPembinaanItem.id,
+          nis: selectedStudent.nis,
+          namaSiswa: selectedStudent.nama,
+          kelas: selectedStudent.kelas,
+          judulTarget: simpleTargetJudul.trim(),
+          kategoriTarget: 'Kedisiplinan',
+          deskripsiRencana: simpleTargetRencana.trim() || simpleTargetJudul.trim(),
+          indikatorKeberhasilan: simpleTargetIndikator.trim() || 'Melaksanakan rencana pembinaan konseling terukur.',
+          tenggatWaktu: simpleTargetTenggat || '',
+          tanggalDibuat: todayStr,
+          status: simpleTargetStatus,
+          poinTargetPengurangan: 0,
+          pembimbing: simpleTargetPetugas.trim() || currentUser?.nama || 'Guru BK',
+          catatanEvaluasi: simpleTargetCatatan.trim()
+        };
+        const res = await googleSheetApi.addActionPlan(newPlan);
+        if (res.success && Array.isArray(res.data)) {
+          setActionPlans(res.data);
+        }
+      } catch (errSync) {
+        console.warn('Sync action plan fallback:', errSync);
+      }
+
+      setSimpleSuccessMsg('Target Pembinaan / Rencana Tindak Lanjut berhasil disimpan ke state pembinaan!');
+      setTimeout(() => setSimpleSuccessMsg(''), 4500);
+
+      // Reset form
+      setSimpleTargetJudul('');
+      setSimpleTargetRencana('');
+      setSimpleTargetIndikator('');
+      setSimpleTargetTenggat('');
+      setSimpleTargetCatatan('');
+      setIsSimpleInputOpen(false);
+    } catch (err) {
+      console.error('Error saving simple target:', err);
+      alert('Gagal menyimpan target pembinaan.');
+    } finally {
+      setIsSubmittingSimple(false);
+    }
+  };
+
+  // Toggle status target pembinaan langsung (misal menandai Tercapai)
+  const handleToggleCoachingStatus = (item: Pembinaan, targetStatus: ActionPlanStatus) => {
+    const updated: Pembinaan = {
+      ...item,
+      status: targetStatus
+    };
+    setPembinaanList(prev => prev.map(p => p.id === item.id ? updated : p));
+    if (onUpdatePembinaan) {
+      onUpdatePembinaan(updated);
+    } else {
+      try {
+        const saved = localStorage.getItem('kesiswaan_custom_pembinaan');
+        const existing: Pembinaan[] = saved ? JSON.parse(saved) : [];
+        const updatedList = existing.map(e => e.id === updated.id ? updated : e);
+        if (!existing.some(e => e.id === updated.id)) updatedList.push(updated);
+        localStorage.setItem('kesiswaan_custom_pembinaan', JSON.stringify(updatedList));
+      } catch (e) {
+        console.warn('Failed local storage update', e);
+      }
+    }
+
+    // Sync with actionPlans if matched
+    setActionPlans(prev => prev.map(p => p.id === item.id ? { ...p, status: targetStatus } : p));
+  };
+
+  // Quick evaluation updater for a coaching item
+  const handleOpenCoachingEval = (item: Pembinaan) => {
+    setEvalCoachingItem(item);
+    setEvalCoachingStatus((item.status as ActionPlanStatus) || 'Sedang Berjalan');
+    setEvalCoachingNote('');
+  };
+
+  const handleSaveCoachingEval = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!evalCoachingItem) return;
+
+    setIsSavingCoachingEval(true);
+    try {
+      const today = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+      const currentNotes = evalCoachingItem.catatan || '';
+      let updatedNotes = currentNotes;
+      if (evalCoachingNote.trim()) {
+        const entry = `[${today} - ${currentUser?.nama || 'Guru BK'}] ${evalCoachingNote.trim()}`;
+        updatedNotes = currentNotes ? `${currentNotes}\n\n${entry}` : entry;
+      }
+
+      const updatedItem: Pembinaan = {
+        ...evalCoachingItem,
+        status: evalCoachingStatus,
+        catatan: updatedNotes
+      };
+
+      setPembinaanList(prev => prev.map(p => p.id === evalCoachingItem.id ? updatedItem : p));
+      if (onUpdatePembinaan) {
+        onUpdatePembinaan(updatedItem);
+      } else {
+        try {
+          const saved = localStorage.getItem('kesiswaan_custom_pembinaan');
+          const existing: Pembinaan[] = saved ? JSON.parse(saved) : [];
+          const updatedList = existing.map(e => e.id === updatedItem.id ? updatedItem : e);
+          if (!existing.some(e => e.id === updatedItem.id)) updatedList.push(updatedItem);
+          localStorage.setItem('kesiswaan_custom_pembinaan', JSON.stringify(updatedList));
+        } catch (e) {
+          console.warn('Failed local storage update', e);
+        }
+      }
+
+      // Also update actionPlan if matched
+      try {
+        await googleSheetApi.updateActionPlan(evalCoachingItem.id, {
+          status: evalCoachingStatus,
+          catatanEvaluasi: updatedNotes
+        });
+        setActionPlans(prev => prev.map(p => p.id === evalCoachingItem.id ? { ...p, status: evalCoachingStatus, catatanEvaluasi: updatedNotes } : p));
+      } catch (e) {
+        console.warn('Sync eval error', e);
+      }
+
+      setEvalCoachingItem(null);
+      setEvalCoachingNote('');
+    } finally {
+      setIsSavingCoachingEval(false);
+    }
+  };
+
+  // Delete coaching item
+  const handleDeleteCoaching = (id: string) => {
+    if (window.confirm('Hapus catatan target pembinaan ini?')) {
+      setPembinaanList(prev => prev.filter(p => p.id !== id));
+      if (onDeletePembinaan) {
+        onDeletePembinaan(id);
+      } else {
+        try {
+          const saved = localStorage.getItem('kesiswaan_custom_pembinaan');
+          if (saved) {
+            const existing: Pembinaan[] = JSON.parse(saved);
+            localStorage.setItem('kesiswaan_custom_pembinaan', JSON.stringify(existing.filter(e => e.id !== id)));
+          }
+        } catch (e) {
+          console.warn('Failed to remove from local storage', e);
+        }
+      }
+    }
+  };
+
   // Create new action plan
   const handleCreateActionPlan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,8 +519,10 @@ export default function RiwayatSiswaDetail({
 
     setIsSavingPlan(true);
     try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const newPlanId = 'AP_' + Date.now();
       const newPlan: Partial<ActionPlan> = {
-        id: 'AP_' + Date.now(),
+        id: newPlanId,
         nis: selectedStudent.nis,
         namaSiswa: selectedStudent.nama,
         kelas: selectedStudent.kelas,
@@ -255,7 +531,7 @@ export default function RiwayatSiswaDetail({
         deskripsiRencana: formDeskripsi.trim(),
         indikatorKeberhasilan: formIndikator.trim(),
         tenggatWaktu: formTenggat || '',
-        tanggalDibuat: new Date().toISOString().split('T')[0],
+        tanggalDibuat: todayStr,
         status: formStatus,
         poinTargetPengurangan: Number(formPoinPengurangan) || 0,
         pembimbing: formPembimbing.trim() || currentUser?.nama || 'Guru BK',
@@ -266,6 +542,36 @@ export default function RiwayatSiswaDetail({
       if (res.success && Array.isArray(res.data)) {
         setActionPlans(res.data);
       }
+
+      // Simpan juga ke state pembinaan agar kedua tampilan selalu sinkron
+      const newCoachingRecord: Pembinaan = {
+        id: newPlanId,
+        nis: selectedStudent.nis,
+        namaSiswa: selectedStudent.nama,
+        totalPoin: totalPoints,
+        tindakan: formJudul.trim(),
+        tanggal: todayStr,
+        targetPembinaan: formJudul.trim(),
+        rencanaTindakLanjut: formDeskripsi.trim(),
+        indikator: formIndikator.trim(),
+        tenggatWaktu: formTenggat || '',
+        status: formStatus,
+        catatan: '',
+        petugas: formPembimbing.trim() || currentUser?.nama || 'Guru BK'
+      };
+      setPembinaanList(prev => [newCoachingRecord, ...prev]);
+      if (onAddPembinaan) {
+        onAddPembinaan(newCoachingRecord);
+      } else {
+        try {
+          const saved = localStorage.getItem('kesiswaan_custom_pembinaan');
+          const existing: Pembinaan[] = saved ? JSON.parse(saved) : [];
+          localStorage.setItem('kesiswaan_custom_pembinaan', JSON.stringify([newCoachingRecord, ...existing]));
+        } catch (e) {
+          console.warn('Gagal simpan ke localStorage:', e);
+        }
+      }
+
       setIsAddModalOpen(false);
       // Reset form
       setFormJudul('');
@@ -624,31 +930,355 @@ export default function RiwayatSiswaDetail({
               </div>
             </div>
 
-            {/* Coaching intervention history logs - taking 1 col */}
+            {/* Coaching intervention history logs & Target Pembinaan Input - taking 1 col */}
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 font-sans">
-              <h4 className="font-bold text-slate-800 text-sm font-display">Riwayat Pembinaan Resmi</h4>
-              
-              <div className="space-y-3">
-                {studentCoaching.length === 0 ? (
-                  <div className="text-center py-10 text-slate-400 italic text-xs">
-                    Belum ada riwayat surat tindakan pembinaan terbit.
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 gap-2">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <Target className="w-4 h-4 text-blue-600" />
+                    <h4 className="font-bold text-slate-800 text-sm font-display">Target & Pembinaan Siswa</h4>
                   </div>
-                ) : (
-                  studentCoaching.map(coaching => (
-                    <div key={coaching.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                      <div className="flex justify-between items-center text-[10px] font-mono text-slate-400">
-                        <span>{coaching.tanggal}</span>
-                        <span className="font-semibold">Kode ID: {coaching.id}</span>
+                  <p className="text-[11px] text-slate-400">Rencana tindak lanjut terukur</p>
+                </div>
+
+                {canManagePlans && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSimpleInputOpen(!isSimpleInputOpen);
+                      setSimpleTargetPetugas(currentUser?.nama || 'Guru BK');
+                    }}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                      isSimpleInputOpen
+                        ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                    }`}
+                  >
+                    {isSimpleInputOpen ? (
+                      <>
+                        <X className="w-3.5 h-3.5" /> Tutup Form
+                      </>
+                    ) : (
+                      <>
+                        <PlusCircle className="w-3.5 h-3.5" /> + Catat Target
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Success Notification Banner */}
+              {simpleSuccessMsg && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{simpleSuccessMsg}</span>
+                </div>
+              )}
+
+              {/* FITUR INPUT SEDERHANA: Target Pembinaan / Rencana Tindak Lanjut */}
+              {isSimpleInputOpen && (
+                <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-200/80 space-y-3.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-blue-900 font-bold text-xs">
+                      <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Input Sederhana Target Pembinaan</span>
+                    </div>
+                    <span className="text-[10px] bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full">
+                      Simpan ke State Pembinaan
+                    </span>
+                  </div>
+
+                  {/* Preset Cepat */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                      Rekomendasi Target Cepat:
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {QUICK_TARGET_PRESETS.map((tpl, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleApplySimplePreset(tpl)}
+                          className="px-2 py-1 bg-white hover:bg-blue-600 hover:text-white border border-blue-200 text-slate-700 text-[10px] font-semibold rounded-lg transition-colors cursor-pointer"
+                        >
+                          {tpl.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleSaveSimpleTarget} className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700 block">
+                        Target Pembinaan / Rencana Tindak Lanjut <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Contoh: Pemulihan Disiplin Waktu & Absensi 30 Hari"
+                        value={simpleTargetJudul}
+                        onChange={(e) => setSimpleTargetJudul(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-semibold"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700 block">
+                        Indikator Keberhasilan Terukur
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: Hadir tepat waktu 100% tanpa alpa selama 30 hari"
+                        value={simpleTargetIndikator}
+                        onChange={(e) => setSimpleTargetIndikator(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700 block">
+                        Langkah Tindak Lanjut Konkret
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Contoh: Konseling individu setiap Senin, kontrol kartu absensi piket harian..."
+                        value={simpleTargetRencana}
+                        onChange={(e) => setSimpleTargetRencana(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-sans"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 block">
+                          Target Tanggal Evaluasi
+                        </label>
+                        <input
+                          type="date"
+                          value={simpleTargetTenggat}
+                          onChange={(e) => setSimpleTargetTenggat(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-mono"
+                        />
                       </div>
-                      
-                      <span className="text-xs font-bold text-slate-800 block">{coaching.tindakan}</span>
-                      
-                      <div className="flex justify-between items-center text-[10px] text-slate-500 font-medium">
-                        <span>Bobot Kumulatif:</span>
-                        <span className="font-mono font-bold text-slate-900">{coaching.totalPoin} Poin</span>
+
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-700 block">
+                          Status Awal
+                        </label>
+                        <select
+                          value={simpleTargetStatus}
+                          onChange={(e) => setSimpleTargetStatus(e.target.value as ActionPlanStatus)}
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="Sedang Berjalan">Sedang Berjalan</option>
+                          <option value="Direncanakan">Direncanakan</option>
+                          <option value="Tercapai">Tercapai</option>
+                        </select>
                       </div>
                     </div>
-                  ))
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700 block">
+                        Catatan Arahan Guru BK
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Catatan awal pendampingan..."
+                        value={simpleTargetCatatan}
+                        onChange={(e) => setSimpleTargetCatatan(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-blue-200/60">
+                      <button
+                        type="button"
+                        onClick={() => setIsSimpleInputOpen(false)}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-xl text-slate-600 hover:bg-slate-200/60 cursor-pointer"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSubmittingSimple}
+                        className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Target className="w-3.5 h-3.5" />
+                        {isSubmittingSimple ? 'Menyimpan...' : 'Simpan ke State Pembinaan'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {/* Progress Summary Mini-Bar */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-[11px] font-bold text-slate-700 block">
+                    Monitoring Rehabilitasi
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    {studentCoaching.filter(c => c.status === 'Tercapai').length} dari {studentCoaching.length} target tercapai
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full font-bold text-[10px]">
+                    {studentCoaching.filter(c => c.status === 'Sedang Berjalan' || !c.status).length} Aktif
+                  </span>
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-bold text-[10px]">
+                    {studentCoaching.filter(c => c.status === 'Tercapai').length} Selesai
+                  </span>
+                </div>
+              </div>
+
+              {/* List of Coaching Records */}
+              <div className="space-y-3">
+                {studentCoaching.length === 0 ? (
+                  <div className="text-center py-10 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 p-6 space-y-2">
+                    <Target className="w-8 h-8 text-slate-300 mx-auto" />
+                    <p className="text-slate-500 font-semibold text-xs">
+                      Belum ada target pembinaan atau rencana tindak lanjut tercatat.
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      Gunakan tombol "+ Catat Target" di atas untuk menambahkan target rehabilitasi siswa secara terukur.
+                    </p>
+                  </div>
+                ) : (
+                  studentCoaching.map(coaching => {
+                    const isCompleted = coaching.status === 'Tercapai';
+                    const isPlanned = coaching.status === 'Direncanakan';
+                    const deadlineBadge = coaching.tenggatWaktu ? getDeadlineBadge(coaching.tenggatWaktu) : null;
+
+                    return (
+                      <div
+                        key={coaching.id}
+                        className={`p-3.5 rounded-xl border space-y-2.5 transition-all ${
+                          isCompleted
+                            ? 'bg-emerald-50/40 border-emerald-200'
+                            : isPlanned
+                            ? 'bg-sky-50/40 border-sky-200'
+                            : 'bg-slate-50 hover:bg-white border-slate-200 shadow-2xs'
+                        }`}
+                      >
+                        {/* Header: Date + Status Badge */}
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="font-mono text-slate-500 font-semibold flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-slate-400" /> {coaching.tanggal}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full font-bold text-[9px] uppercase tracking-wider border ${
+                              isCompleted
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : isPlanned
+                                ? 'bg-sky-100 text-sky-800 border-sky-300'
+                                : 'bg-amber-100 text-amber-800 border-amber-300'
+                            }`}
+                          >
+                            {coaching.status || 'Sedang Berjalan'}
+                          </span>
+                        </div>
+
+                        {/* Title: Tindakan / Target */}
+                        <div className="space-y-1">
+                          <span className={`text-xs font-bold block ${isCompleted ? 'line-through text-slate-500' : 'text-slate-800'}`}>
+                            {coaching.targetPembinaan || coaching.tindakan}
+                          </span>
+
+                          {coaching.rencanaTindakLanjut && coaching.rencanaTindakLanjut !== (coaching.targetPembinaan || coaching.tindakan) && (
+                            <p className="text-[11px] text-slate-600 leading-relaxed font-sans">
+                              {coaching.rencanaTindakLanjut}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Indikator Terukur */}
+                        {coaching.indikator && (
+                          <div className="bg-white/90 p-2 rounded-lg border border-slate-200/80 text-[11px] space-y-0.5">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Indikator Terukur:
+                            </span>
+                            <span className="text-slate-800 font-medium block">
+                              {coaching.indikator}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Deadline & Mentor info */}
+                        {(coaching.tenggatWaktu || coaching.petugas) && (
+                          <div className="flex flex-wrap items-center justify-between text-[10px] text-slate-500 gap-1 pt-1 border-t border-slate-100">
+                            {coaching.tenggatWaktu && deadlineBadge && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-blue-500" />
+                                <span>Target: <strong>{coaching.tenggatWaktu}</strong></span>
+                                <span className={`px-1.5 py-0.2 rounded text-[8px] font-bold border ${deadlineBadge.style}`}>
+                                  {deadlineBadge.text}
+                                </span>
+                              </span>
+                            )}
+                            {coaching.petugas && (
+                              <span className="italic">
+                                Pembimbing: {coaching.petugas}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Catatan Evaluasi Terakhir */}
+                        {coaching.catatan && (
+                          <div className="bg-blue-50/60 p-2 rounded-lg border border-blue-100 text-[10px] text-slate-700 font-mono whitespace-pre-line">
+                            <span className="font-sans font-bold text-blue-800 block text-[9px] uppercase tracking-wider">
+                              Catatan Evaluasi / Catatan Progres:
+                            </span>
+                            {coaching.catatan}
+                          </div>
+                        )}
+
+                        {/* Interactive Action Buttons */}
+                        {canManagePlans && (
+                          <div className="flex items-center justify-between pt-1.5 border-t border-slate-200/60 gap-1 text-[11px]">
+                            <div className="flex items-center gap-1.5">
+                              {isCompleted ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleCoachingStatus(coaching, 'Sedang Berjalan')}
+                                  className="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold text-[10px] cursor-pointer"
+                                  title="Buka kembali pemantauan"
+                                >
+                                  Buka Kembali
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleCoachingStatus(coaching, 'Tercapai')}
+                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[10px] flex items-center gap-1 shadow-2xs cursor-pointer"
+                                  title="Tandai target berhasil dicapai"
+                                >
+                                  <CheckCircle2 className="w-3 h-3" /> Tandai Tercapai
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCoachingEval(coaching)}
+                                className="px-2 py-1 bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 border border-slate-200 rounded-lg font-semibold text-[10px] flex items-center gap-1 cursor-pointer"
+                              >
+                                <Edit3 className="w-3 h-3" /> + Catatan Progres
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCoaching(coaching.id)}
+                              className="p-1 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
+                              title="Hapus Target"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -1147,6 +1777,98 @@ export default function RiwayatSiswaDetail({
                   className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer"
                 >
                   {isSavingEval ? 'Menyimpan...' : 'Simpan Evaluasi'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: EVALUASI & CATATAN PERKEMBANGAN PEMBINAAN SISWA */}
+      {/* ========================================================================= */}
+      {evalCoachingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl p-6 md:p-8 space-y-6 animate-in fade-in zoom-in-95 duration-200 my-8">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="space-y-0.5">
+                <h3 className="text-base font-bold text-slate-900 font-display">
+                  Catat Progres Perkembangan Siswa
+                </h3>
+                <p className="text-xs text-slate-500 truncate max-w-xs">
+                  {evalCoachingItem.targetPembinaan || evalCoachingItem.tindakan}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEvalCoachingItem(null)}
+                className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-xl cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCoachingEval} className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Status Capaian Target Saat Ini
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['Direncanakan', 'Sedang Berjalan', 'Tercapai', 'Perlu Evaluasi Ulang'] as const).map(st => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setEvalCoachingStatus(st)}
+                      className={`p-2.5 rounded-xl text-xs font-bold border transition-all text-left flex items-center justify-between cursor-pointer ${
+                        evalCoachingStatus === st
+                          ? 'border-blue-600 bg-blue-50 text-blue-700'
+                          : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'
+                      }`}
+                    >
+                      <span>{st}</span>
+                      {evalCoachingStatus === st && <CheckCircle2 className="w-4 h-4 text-blue-600" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Tambah Catatan Perkembangan / Observasi Berkala
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Contoh: Siswa sudah hadir tepat waktu selama 7 hari berturut-turut, tidak ada keterlambatan, komunikasi dengan wali kelas baik..."
+                  value={evalCoachingNote}
+                  onChange={(e) => setEvalCoachingNote(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 leading-relaxed font-sans"
+                />
+              </div>
+
+              {evalCoachingItem.catatan && (
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1 max-h-36 overflow-y-auto">
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Riwayat Catatan Sebelumnya:</span>
+                  <p className="text-slate-700 font-mono text-[11px] whitespace-pre-line">
+                    {evalCoachingItem.catatan}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEvalCoachingItem(null)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCoachingEval}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {isSavingCoachingEval ? 'Menyimpan...' : 'Simpan Catatan Perkembangan'}
                 </button>
               </div>
             </form>

@@ -172,7 +172,20 @@ export default function App() {
       
       if (resRecords.success && resRecords.data) {
         setPencatatan(resRecords.data.pencatatan);
-        setPembinaan(resRecords.data.pembinaan);
+        const serverPembinaan = resRecords.data.pembinaan || [];
+        try {
+          const savedCustom = localStorage.getItem('kesiswaan_custom_pembinaan');
+          if (savedCustom) {
+            const customList: Pembinaan[] = JSON.parse(savedCustom);
+            const serverIds = new Set(serverPembinaan.map(p => p.id));
+            const merged = [...customList.filter(c => !serverIds.has(c.id)), ...serverPembinaan];
+            setPembinaan(merged);
+          } else {
+            setPembinaan(serverPembinaan);
+          }
+        } catch {
+          setPembinaan(serverPembinaan);
+        }
       }
     } catch (err) {
       showToast('Gagal memuat data dari database kesiswaan.', 'error');
@@ -326,6 +339,54 @@ export default function App() {
     }
   };
 
+  // 4. Pembinaan & Action Plan State Handlers
+  const handleAddPembinaan = (newPembinaan: Pembinaan) => {
+    setPembinaan(prev => [newPembinaan, ...prev]);
+    try {
+      const saved = localStorage.getItem('kesiswaan_custom_pembinaan');
+      const existing: Pembinaan[] = saved ? JSON.parse(saved) : [];
+      localStorage.setItem(
+        'kesiswaan_custom_pembinaan',
+        JSON.stringify([newPembinaan, ...existing.filter(e => e.id !== newPembinaan.id)])
+      );
+    } catch (e) {
+      console.warn('Gagal menyimpan pembinaan ke localStorage', e);
+    }
+    showToast('Target pembinaan / rencana tindak lanjut berhasil dicatat.', 'success');
+  };
+
+  const handleUpdatePembinaan = (updated: Pembinaan) => {
+    setPembinaan(prev => prev.map(p => p.id === updated.id ? updated : p));
+    try {
+      const saved = localStorage.getItem('kesiswaan_custom_pembinaan');
+      const existing: Pembinaan[] = saved ? JSON.parse(saved) : [];
+      const updatedList = existing.map(e => e.id === updated.id ? updated : e);
+      if (!existing.some(e => e.id === updated.id)) {
+        updatedList.push(updated);
+      }
+      localStorage.setItem('kesiswaan_custom_pembinaan', JSON.stringify(updatedList));
+    } catch (e) {
+      console.warn('Gagal update pembinaan di localStorage', e);
+    }
+  };
+
+  const handleDeletePembinaan = (id: string) => {
+    setPembinaan(prev => prev.filter(p => p.id !== id));
+    try {
+      const saved = localStorage.getItem('kesiswaan_custom_pembinaan');
+      if (saved) {
+        const existing: Pembinaan[] = JSON.parse(saved);
+        localStorage.setItem(
+          'kesiswaan_custom_pembinaan',
+          JSON.stringify(existing.filter(e => e.id !== id))
+        );
+      }
+    } catch (e) {
+      console.warn('Gagal menghapus pembinaan di localStorage', e);
+    }
+    showToast('Catatan pembinaan berhasil dihapus.', 'success');
+  };
+
   // Handle linking to Student Profile from other widgets
   const handleSelectSiswa = (nis: string) => {
     setSelectedNisFromOutside(nis);
@@ -408,6 +469,9 @@ export default function App() {
             currentUser={currentUser ? { nama: currentUser.nama, role: currentUser.role } : undefined}
             onDeleteRecord={handleDeleteRecord}
             selectedNisFromOutside={selectedNisFromOutside}
+            onAddPembinaan={handleAddPembinaan}
+            onUpdatePembinaan={handleUpdatePembinaan}
+            onDeletePembinaan={handleDeletePembinaan}
           />
         );
 

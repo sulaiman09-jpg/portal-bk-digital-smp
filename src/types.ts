@@ -37,6 +37,13 @@ export interface Pembinaan {
   totalPoin: number;
   tindakan: string;
   tanggal: string;
+  targetPembinaan?: string;
+  rencanaTindakLanjut?: string;
+  indikator?: string;
+  tenggatWaktu?: string;
+  status?: 'Direncanakan' | 'Sedang Berjalan' | 'Tercapai' | 'Perlu Evaluasi Ulang';
+  catatan?: string;
+  petugas?: string;
 }
 
 export type ActionPlanStatus = 'Direncanakan' | 'Sedang Berjalan' | 'Tercapai' | 'Perlu Evaluasi Ulang';
