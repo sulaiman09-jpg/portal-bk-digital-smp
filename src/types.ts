@@ -39,6 +39,27 @@ export interface Pembinaan {
   tanggal: string;
 }
 
+export type ActionPlanStatus = 'Direncanakan' | 'Sedang Berjalan' | 'Tercapai' | 'Perlu Evaluasi Ulang';
+export type ActionPlanKategori = 'Kedisiplinan' | 'Akademik' | 'Kerapian' | 'Etika & Sikap' | 'Sosial & Emosi';
+
+export interface ActionPlan {
+  id: string;
+  nis: string;
+  namaSiswa: string;
+  kelas: string;
+  judulTarget: string;
+  kategoriTarget: ActionPlanKategori;
+  deskripsiRencana: string;
+  indikatorKeberhasilan: string;
+  tenggatWaktu: string; // YYYY-MM-DD
+  tanggalDibuat: string; // YYYY-MM-DD
+  status: ActionPlanStatus;
+  poinTargetPengurangan?: number; // Target pengurangan/pemulihan poin jika berhasil
+  pembimbing: string; // Nama Guru BK / Wali Kelas
+  catatanEvaluasi?: string;
+  tanggalEvaluasiTerakhir?: string;
+}
+
 export interface KehadiranData {
   id: string;
   nis: string;

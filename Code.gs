@@ -383,23 +383,23 @@ function getRecords(ss) {
   var rawPembinaan = sheetsPembinaan.length > 0 ? getSheetData(sheetsPembinaan[0]) : [];
   
   var dataPencatatan = rawPencatatan.map(function(item) {
-    var rawDate = String(getColValue(item, ['Tanggal', 'TANGGAL'], ''));
+    var rawDate = String(getColValue(item, ['Tanggal', 'TANGGAL', 'Date', 'DATE'], ''));
     var cleanDate = rawDate ? rawDate.split('T')[0] : '';
     
     return {
       id: String(getColValue(item, ['ID', 'id'], '')),
       tanggal: cleanDate,
-      nis: String(getColValue(item, ['NIS', 'nis'], '')),
-      namaSiswa: String(getColValue(item, ['Nama Siswa', 'NAMA_SISWA', 'Nama', 'NAMA'], '')),
-      kelas: String(getColValue(item, ['Kelas', 'KELAS'], '')),
-      pelanggaran: String(getColValue(item, ['Jenis Pelanggaran', 'JENIS_PELANGGARAN', 'Pelanggaran', 'PELANGGARAN', 'Nama Pelanggaran'], '')),
-      poin: Number(getColValue(item, ['Poin', 'POIN'], 0)),
-      petugas: String(getColValue(item, ['Petugas', 'PETUGAS', 'Guru Piket', 'Guru BK'], '')),
-      keterangan: String(getColValue(item, ['Keterangan', 'KETERANGAN', 'Catatan'], '')),
-      foto: String(getColValue(item, ['Foto', 'FOTO', 'Photo'], ''))
+      nis: String(getColValue(item, ['NIS', 'nis', 'NISN'], '')),
+      namaSiswa: String(getColValue(item, ['Nama Siswa', 'NAMA_SISWA', 'Nama', 'NAMA', 'SISWA', 'Siswa'], '')),
+      kelas: String(getColValue(item, ['Kelas', 'KELAS', 'Rombel', 'ROMBEL'], '')),
+      pelanggaran: String(getColValue(item, ['Jenis Pelanggaran', 'JENIS_PELANGGARAN', 'JENIS_PELANG', 'Pelanggaran', 'PELANGGARAN', 'Nama Pelanggaran', 'NAMA_PELANGGARAN', 'Kasus', 'KASUS'], '')),
+      poin: Number(getColValue(item, ['Poin', 'POIN', 'Point', 'POINT', 'Bobot Poin'], 0)),
+      petugas: String(getColValue(item, ['Petugas', 'PETUGAS', 'Guru Piket', 'Guru BK', 'Pencatat', 'PENCATAT'], '')),
+      keterangan: String(getColValue(item, ['Keterangan', 'KETERANGAN', 'Catatan', 'CATATAN', 'Kronologi'], '')),
+      foto: String(getColValue(item, ['Foto', 'FOTO', 'Photo', 'PHOTO', 'Bukti', 'BUKTI'], ''))
     };
   }).filter(function(r) {
-    return r.nis || r.namaSiswa;
+    return (r.nis && r.nis.trim() !== '') || (r.namaSiswa && r.namaSiswa.trim() !== '');
   });
   
   var dataPembinaan = rawPembinaan.map(function(item) {
@@ -526,14 +526,14 @@ function addRecord(ss, data) {
   var studentList = getStudents(ss);
   var student = null;
   for (var i = 0; i < studentList.length; i++) {
-    if (String(studentList[i].nis) === String(data.nis)) {
+    if (String(studentList[i].nis).trim() === String(data.nis).trim()) {
       student = studentList[i];
       break;
     }
   }
   
-  var siswaNama = student ? student.nama : (data.namaSiswa || '');
-  var siswaKelas = student ? student.kelas : (data.kelas || '');
+  var siswaNama = (data.namaSiswa && data.namaSiswa.trim() !== '') ? data.namaSiswa : (student ? student.nama : '');
+  var siswaKelas = (data.kelas && data.kelas.trim() !== '') ? data.kelas : (student ? student.kelas : '');
   
   // Ambil poin & kode pelanggaran
   var violations = getViolations(ss);
@@ -548,10 +548,10 @@ function addRecord(ss, data) {
     }
   }
   
-  var sheets = findSheetsByAliases(ss, ['PENCATATAN_PELANGGARAN', 'PENCATATAN', 'PENCATATAN PELANGGARAN']);
+  var sheets = findSheetsByAliases(ss, ['PENCATATAN_PELANGGARAN', 'PENCATATAN', 'PENCATATAN PELANGGARAN', 'DATA_PELANGGARAN_SISWA']);
   if (sheets.length === 0) {
     var newSh = ss.insertSheet('PENCATATAN_PELANGGARAN');
-    newSh.appendRow(['ID', 'TANGGAL', 'NIS', 'NAMA_SISWA', 'KELAS', 'KODE_PELANGGARAN', 'JENIS_PELANGGARAN', 'POIN', 'PETUGAS', 'KETERANGAN', 'FOTO']);
+    newSh.appendRow(['ID', 'TANGGAL', 'NIS', 'NAMA_SISWA', 'KELAS', 'KODE_PELANG', 'JENIS_PELANG', 'POIN', 'PETUGAS', 'KETERANGAN', 'FOTO']);
     sheets = [newSh];
   }
   
@@ -565,7 +565,7 @@ function addRecord(ss, data) {
     var foundRow = -1;
     
     for (var k = 1; k < values.length; k++) {
-      if (String(values[k][0]) === String(id)) {
+      if (String(values[k][0]).trim() === String(id).trim()) {
         foundRow = k + 1;
         break;
       }
@@ -577,16 +577,16 @@ function addRecord(ss, data) {
       for (var h = 0; h < headers.length; h++) {
         var hName = String(headers[h] || '').toUpperCase().replace(/[\s_]/g, '');
         if (hName === 'ID') rowData.push(id);
-        else if (hName === 'TANGGAL') rowData.push(tanggal);
-        else if (hName === 'NIS') rowData.push(data.nis);
-        else if (hName === 'NAMASISWA' || hName === 'NAMA') rowData.push(siswaNama);
-        else if (hName === 'KELAS') rowData.push(siswaKelas);
-        else if (hName === 'KODEPELANGGARAN' || hName === 'KODE') rowData.push(kodePel);
-        else if (hName === 'JENISPELANGGARAN' || hName === 'PELANGGARAN') rowData.push(data.pelanggaran);
-        else if (hName === 'POIN') rowData.push(poin);
-        else if (hName === 'PETUGAS') rowData.push(data.petugas || '');
-        else if (hName === 'KETERANGAN' || hName === 'CATATAN') rowData.push(data.keterangan || '');
-        else if (hName === 'FOTO' || hName === 'PHOTO') rowData.push(data.foto || '');
+        else if (hName === 'TANGGAL' || hName === 'DATE') rowData.push(tanggal);
+        else if (hName === 'NIS' || hName === 'NISN') rowData.push(data.nis);
+        else if (hName === 'NAMASISWA' || hName === 'NAMA' || hName === 'SISWA') rowData.push(siswaNama);
+        else if (hName === 'KELAS' || hName === 'ROMBEL') rowData.push(siswaKelas);
+        else if (hName === 'KODEPELANGGARAN' || hName === 'KODEPELANG' || hName === 'KODE') rowData.push(kodePel);
+        else if (hName === 'JENISPELANGGARAN' || hName === 'JENISPELANG' || hName === 'PELANGGARAN' || hName === 'KASUS' || hName === 'KASUSPELANGGARAN') rowData.push(data.pelanggaran);
+        else if (hName === 'POIN' || hName === 'POINT' || hName === 'BOBOT') rowData.push(poin);
+        else if (hName === 'PETUGAS' || hName === 'PENCATAT' || hName === 'GURU') rowData.push(data.petugas || '');
+        else if (hName === 'KETERANGAN' || hName === 'CATATAN' || hName === 'KRONOLOGI') rowData.push(data.keterangan || '');
+        else if (hName === 'FOTO' || hName === 'PHOTO' || hName === 'BUKTI') rowData.push(data.foto || '');
         else rowData.push('');
       }
     } else {

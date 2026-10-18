@@ -45,6 +45,24 @@ export interface Pembinaan {
   tanggal: string;
 }
 
+export interface ActionPlan {
+  id: string;
+  nis: string;
+  namaSiswa: string;
+  kelas: string;
+  judulTarget: string;
+  kategoriTarget: 'Kedisiplinan' | 'Akademik' | 'Kerapian' | 'Etika & Sikap' | 'Sosial & Emosi';
+  deskripsiRencana: string;
+  indikatorKeberhasilan: string;
+  tenggatWaktu: string;
+  tanggalDibuat: string;
+  status: 'Direncanakan' | 'Sedang Berjalan' | 'Tercapai' | 'Perlu Evaluasi Ulang';
+  poinTargetPengurangan?: number;
+  pembimbing: string;
+  catatanEvaluasi?: string;
+  tanggalEvaluasiTerakhir?: string;
+}
+
 export interface KehadiranData {
   id: string;
   nis: string;
@@ -263,6 +281,7 @@ let seedDbData: {
   asesmen?: AsesmenData[];
   kunjungan?: KunjunganRumahData[];
   snbp?: SnbpData[];
+  actionPlans?: ActionPlan[];
 } = {};
 try {
   const seedFile = path.join(process.cwd(), 'data-store.json');
@@ -326,6 +345,7 @@ const initialKonseling: KonselingData[] = seedDbData.konseling || [];
 const initialAsesmen: AsesmenData[] = seedDbData.asesmen || [];
 const initialKunjungan: KunjunganRumahData[] = seedDbData.kunjungan || [];
 const initialSnbp: SnbpData[] = seedDbData.snbp || [];
+const initialActionPlans: ActionPlan[] = seedDbData.actionPlans || [];
 
 interface DBStructure {
   siswa: Siswa[];
@@ -337,6 +357,7 @@ interface DBStructure {
   asesmen?: AsesmenData[];
   kunjungan?: KunjunganRumahData[];
   snbp?: SnbpData[];
+  actionPlans?: ActionPlan[];
 }
 
 // Sanitize and deduplicate database to prevent any duplicate students or records
@@ -665,7 +686,8 @@ function readDB(): DBStructure {
         konseling: initialKonseling,
         asesmen: initialAsesmen,
         kunjungan: initialKunjungan,
-        snbp: initialSnbp
+        snbp: initialSnbp,
+        actionPlans: initialActionPlans
       };
 
       // If we fell back to a temporary directory (e.g. on Vercel), copy seed file from build workspace if it exists
@@ -674,7 +696,9 @@ function readDB(): DBStructure {
         if (fs.existsSync(localPath)) {
           const content = fs.readFileSync(localPath, 'utf-8');
           fs.writeFileSync(DATA_STORE_PATH, content, 'utf-8');
-          return sanitizeAndDeduplicate(JSON.parse(content));
+          const parsed = JSON.parse(content);
+          if (!parsed.actionPlans) parsed.actionPlans = [];
+          return sanitizeAndDeduplicate(parsed);
         }
       }
 
@@ -682,7 +706,9 @@ function readDB(): DBStructure {
       return sanitizeAndDeduplicate(defaultData);
     }
     const rawData = fs.readFileSync(DATA_STORE_PATH, 'utf-8');
-    return sanitizeAndDeduplicate(JSON.parse(rawData));
+    const parsed = JSON.parse(rawData);
+    if (!parsed.actionPlans) parsed.actionPlans = [];
+    return sanitizeAndDeduplicate(parsed);
   } catch (err) {
     console.error('Error reading DB, using initial data:', err);
     return sanitizeAndDeduplicate({
@@ -690,7 +716,8 @@ function readDB(): DBStructure {
       pelanggaran: initialPelanggaran,
       pencatatan: initialPencatatan,
       pembinaan: initialPembinaan,
-      kehadiran: initialKehadiran
+      kehadiran: initialKehadiran,
+      actionPlans: []
     });
   }
 }
@@ -1099,6 +1126,8 @@ apiRouter.get('/data', async (req, res) => {
       return res.json({ success: true, data: db.kunjungan || [] });
     case 'getSnbp':
       return res.json({ success: true, data: db.snbp || [] });
+    case 'getActionPlans':
+      return res.json({ success: true, data: db.actionPlans || [] });
     case 'getAllData':
       return res.json({ success: true, data: db });
     default:
@@ -1111,43 +1140,28 @@ apiRouter.post('/data', async (req, res) => {
   const body = req.body || {};
   const scriptUrl = (req.headers['x-google-script-url'] as string) || process.env.GOOGLE_SCRIPT_URL || '';
 
-  const isSyncAction = action && action.startsWith('sync');
-
-  // For serverless environments like Vercel, we must AWAIT the write operation to Google Sheets
-  // because background promises are instantly suspended or terminated once the response is returned.
-  if (scriptUrl && !isSyncAction) {
-    try {
-      console.log(`[Sync Write] Menyimpan perubahan (${action}) secara langsung ke Google Sheets...`);
-      await proxyToGoogleScript(action, 'POST', body, scriptUrl);
-      console.log(`[Sync Write] Berhasil menyelaraskan perubahan (${action}) ke Google Sheets.`);
-    } catch (err: any) {
-      console.warn(`[Sync Write Fail] Gagal menulis perubahan ke Google Sheets:`, err.message);
-    }
-  }
-
   const db = readDB();
 
   switch (action) {
     case 'addStudent': {
       const newSiswa: Siswa = {
         id: body.id || 'S' + Math.floor(1000 + Math.random() * 9000),
-        nis: body.nis,
-        nama: body.nama,
-        kelas: body.kelas,
-        jk: body.jk,
-        namaOrangTua: body.namaOrangTua,
-        noHp: body.noHp,
+        nis: String(body.nis || '').trim(),
+        nama: String(body.nama || '').trim(),
+        kelas: String(body.kelas || '').trim(),
+        jk: body.jk || 'L',
+        namaOrangTua: body.namaOrangTua || '',
+        noHp: body.noHp || '',
         foto: body.foto || ''
       };
 
       // Check if NIS already exists for addition (only if not an edit/overwrite)
-      const existingIdx = db.siswa.findIndex(s => s.nis === body.nis);
+      const existingIdx = db.siswa.findIndex(s => String(s.nis).trim() === newSiswa.nis);
       if (existingIdx !== -1 && !body.id) {
         return res.status(400).json({ success: false, message: 'NIS sudah terdaftar.' });
       }
 
       if (body.id) {
-        // Edit existing
         const idx = db.siswa.findIndex(s => s.id === body.id);
         if (idx !== -1) {
           db.siswa[idx] = newSiswa;
@@ -1159,21 +1173,37 @@ apiRouter.post('/data', async (req, res) => {
       }
 
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('addStudent', 'POST', newSiswa, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync Write AddStudent]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Data siswa berhasil disimpan.', data: db.siswa });
     }
 
     case 'deleteStudent': {
-      const studentToDelete = db.siswa.find(s => s.id === body.id);
-      if (!studentToDelete) {
-        return res.status(404).json({ success: false, message: 'Data siswa tidak ditemukan.' });
+      const studentToDelete = db.siswa.find(s => s.id === body.id || String(s.nis).trim() === String(body.nis || '').trim());
+      
+      db.siswa = db.siswa.filter(s => s.id !== body.id && (!body.nis || String(s.nis).trim() !== String(body.nis).trim()));
+      if (studentToDelete) {
+        db.pencatatan = db.pencatatan.filter(r => String(r.nis).trim() !== String(studentToDelete.nis).trim());
+        db.pembinaan = db.pembinaan.filter(p => String(p.nis).trim() !== String(studentToDelete.nis).trim());
       }
 
-      db.siswa = db.siswa.filter(s => s.id !== body.id);
-      // Clean up records and coaching for deleted student
-      db.pencatatan = db.pencatatan.filter(r => r.nis !== studentToDelete.nis);
-      db.pembinaan = db.pembinaan.filter(p => p.nis !== studentToDelete.nis);
-
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('deleteStudent', 'POST', { id: body.id, nis: studentToDelete?.nis }, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync Write DeleteStudent]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Data siswa berhasil dihapus.', data: db.siswa });
     }
 
@@ -1198,34 +1228,52 @@ apiRouter.post('/data', async (req, res) => {
       }
 
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('addViolation', 'POST', newViolation, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync Write AddViolation]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Jenis pelanggaran berhasil disimpan.', data: db.pelanggaran });
     }
 
     case 'deleteViolation': {
       db.pelanggaran = db.pelanggaran.filter(v => v.id !== body.id);
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('deleteViolation', 'POST', { id: body.id, kode: body.kode }, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync Write DeleteViolation]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Jenis pelanggaran berhasil dihapus.', data: db.pelanggaran });
     }
 
     case 'addRecord': {
       // Find student and violation details to fill points and full info
-      const student = db.siswa.find(s => s.nis === body.nis);
-      if (!student) {
-        return res.status(404).json({ success: false, message: 'NIS siswa tidak terdaftar.' });
-      }
+      const student = db.siswa.find(s => String(s.nis).trim() === String(body.nis || '').trim());
+      const namaSiswa = body.namaSiswa || (student ? student.nama : 'Siswa');
+      const kelas = body.kelas || (student ? student.kelas : '-');
 
       const violationMaster = db.pelanggaran.find(v => v.namaPelanggaran === body.pelanggaran);
       const points = body.poin !== undefined ? parseInt(body.poin, 10) : (violationMaster ? violationMaster.poin : 0);
+      const kodePel = body.kode || (violationMaster ? violationMaster.kode : '');
 
       const newRecord: Pencatatan = {
-        id: body.id || 'R' + Math.floor(1000 + Math.random() * 9000),
+        id: body.id || 'R' + Date.now() + Math.floor(Math.random() * 1000),
         tanggal: body.tanggal || new Date().toISOString().split('T')[0],
-        nis: body.nis,
-        namaSiswa: student.nama,
-        kelas: student.kelas,
+        nis: String(body.nis || '').trim(),
+        namaSiswa,
+        kelas,
         pelanggaran: body.pelanggaran,
         poin: points,
-        petugas: body.petugas,
+        petugas: body.petugas || 'Petugas BK',
         keterangan: body.keterangan || '',
         foto: body.foto || ''
       };
@@ -1242,32 +1290,62 @@ apiRouter.post('/data', async (req, res) => {
       }
 
       // Automatically recalculate points and create/update pembinaan
-      let updatedDb = recalculatePembinaan(student.nis, db, newRecord.tanggal);
-
+      let updatedDb = recalculatePembinaan(newRecord.nis, db, newRecord.tanggal);
       writeDB(updatedDb);
-      return res.json({ success: true, message: 'Pelanggaran siswa berhasil dicatat.', data: updatedDb.pencatatan });
+
+      if (scriptUrl) {
+        try {
+          console.log(`[Sync Write AddRecord] Mengirim data ke Google Sheets...`, newRecord);
+          await proxyToGoogleScript('addRecord', 'POST', {
+            ...newRecord,
+            kode: kodePel
+          }, scriptUrl);
+          console.log(`[Sync Write AddRecord] Berhasil tersimpan ke Google Sheets.`);
+        } catch (err: any) {
+          console.warn(`[Sync Write AddRecord Alert] Gagal menulis ke Google Sheets:`, err.message);
+        }
+      }
+
+      return res.json({ 
+        success: true, 
+        message: 'Pelanggaran siswa berhasil dicatat.', 
+        data: {
+          pencatatan: updatedDb.pencatatan,
+          pembinaan: updatedDb.pembinaan
+        } 
+      });
     }
 
     case 'deleteRecord': {
       const record = db.pencatatan.find(r => r.id === body.id);
-      if (!record) {
-        return res.status(404).json({ success: false, message: 'Pencatatan pelanggaran tidak ditemukan.' });
-      }
-
       db.pencatatan = db.pencatatan.filter(r => r.id !== body.id);
 
       // Recalculate pembinaan for this student since their records changed
-      let updatedDb = recalculatePembinaan(record.nis, db, new Date().toISOString().split('T')[0]);
-
+      let updatedDb = record ? recalculatePembinaan(record.nis, db, new Date().toISOString().split('T')[0]) : db;
       writeDB(updatedDb);
-      return res.json({ success: true, message: 'Pencatatan pelanggaran berhasil dihapus.', data: updatedDb.pencatatan });
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('deleteRecord', 'POST', { id: body.id, nis: record?.nis }, scriptUrl);
+        } catch (err: any) {
+          console.warn(`[Sync DeleteRecord Alert]:`, err.message);
+        }
+      }
+
+      return res.json({ 
+        success: true, 
+        message: 'Pencatatan pelanggaran berhasil dihapus.', 
+        data: {
+          pencatatan: updatedDb.pencatatan,
+          pembinaan: updatedDb.pembinaan
+        } 
+      });
     }
 
     case 'addKehadiran': {
-      const student = db.siswa.find(s => s.nis === body.nis);
-      if (!student) {
-        return res.status(404).json({ success: false, message: 'NIS siswa tidak terdaftar.' });
-      }
+      const student = db.siswa.find(s => String(s.nis).trim() === String(body.nis || '').trim());
+      const namaSiswa = body.namaSiswa || (student ? student.nama : '');
+      const kelas = body.kelas || (student ? student.kelas : '');
 
       const hadir = Number(body.hadir || 0);
       const sakit = Number(body.sakit || 0);
@@ -1278,12 +1356,12 @@ apiRouter.post('/data', async (req, res) => {
 
       const newKehadiran: KehadiranData = {
         id: body.id || 'H-' + Date.now(),
-        nis: body.nis,
-        namaSiswa: student.nama,
-        kelas: student.kelas,
-        mingguKe: body.mingguKe,
-        bulan: body.bulan,
-        tahun: body.tahun,
+        nis: String(body.nis || '').trim(),
+        namaSiswa,
+        kelas,
+        mingguKe: String(body.mingguKe || '1'),
+        bulan: String(body.bulan || 'Januari'),
+        tahun: String(body.tahun || new Date().getFullYear()),
         hadir,
         sakit,
         izin,
@@ -1298,7 +1376,7 @@ apiRouter.post('/data', async (req, res) => {
       // Check if existing record by ID or by composite (NIS + mingguKe + bulan + tahun)
       const existingIdx = db.kehadiran.findIndex(h => 
         (body.id && h.id === body.id) || 
-        (h.nis === body.nis && h.mingguKe === body.mingguKe && h.bulan === body.bulan && h.tahun === body.tahun)
+        (h.nis === newKehadiran.nis && h.mingguKe === newKehadiran.mingguKe && h.bulan === newKehadiran.bulan && h.tahun === newKehadiran.tahun)
       );
 
       if (existingIdx !== -1) {
@@ -1308,6 +1386,15 @@ apiRouter.post('/data', async (req, res) => {
       }
 
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('addKehadiran', 'POST', newKehadiran, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync Write AddKehadiran]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Rekap kehadiran berhasil disimpan.', data: db.kehadiran });
     }
 
@@ -1315,18 +1402,27 @@ apiRouter.post('/data', async (req, res) => {
       if (!db.kehadiran) db.kehadiran = [];
       db.kehadiran = db.kehadiran.filter(h => h.id !== body.id);
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('deleteKehadiran', 'POST', { id: body.id }, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync DeleteKehadiran]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Rekap kehadiran berhasil dihapus.', data: db.kehadiran });
     }
 
     case 'addKonseling': {
       if (!db.konseling) db.konseling = [];
-      const student = db.siswa.find(s => s.nis === body.nis);
+      const student = db.siswa.find(s => String(s.nis).trim() === String(body.nis || '').trim());
       const id = body.id || ('K-' + Date.now());
       const newKonseling: KonselingData = {
         id,
-        nis: body.nis,
-        namaSiswa: student ? student.nama : (body.namaSiswa || ''),
-        kelas: student ? student.kelas : (body.kelas || ''),
+        nis: String(body.nis || '').trim(),
+        namaSiswa: body.namaSiswa || (student ? student.nama : ''),
+        kelas: body.kelas || (student ? student.kelas : ''),
         jenisKonseling: body.jenisKonseling || 'Individu',
         tanggal: (body.tanggal || new Date().toISOString()).split('T')[0],
         permasalahanUtama: body.permasalahanUtama || '',
@@ -1345,6 +1441,15 @@ apiRouter.post('/data', async (req, res) => {
       }
 
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('addKonseling', 'POST', newKonseling, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync Write AddKonseling]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Data konseling berhasil disimpan.', data: db.konseling });
     }
 
@@ -1352,18 +1457,27 @@ apiRouter.post('/data', async (req, res) => {
       if (!db.konseling) db.konseling = [];
       db.konseling = db.konseling.filter(k => k.id !== body.id);
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('deleteKonseling', 'POST', { id: body.id }, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync DeleteKonseling]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Data konseling berhasil dihapus.', data: db.konseling });
     }
 
     case 'addAsesmen': {
       if (!db.asesmen) db.asesmen = [];
-      const student = db.siswa.find(s => s.nis === body.nis);
+      const student = db.siswa.find(s => String(s.nis).trim() === String(body.nis || '').trim());
       const id = body.id || ('A-' + (body.nis || Date.now()));
       const newAsesmen: AsesmenData = {
         id,
-        nis: body.nis,
-        namaSiswa: student ? student.nama : (body.namaSiswa || ''),
-        kelas: student ? student.kelas : (body.kelas || ''),
+        nis: String(body.nis || '').trim(),
+        namaSiswa: body.namaSiswa || (student ? student.nama : ''),
+        kelas: body.kelas || (student ? student.kelas : ''),
         hasilAKPD: body.hasilAKPD || '',
         gayaBelajar: body.gayaBelajar || '',
         aum: body.aum || '',
@@ -1379,6 +1493,15 @@ apiRouter.post('/data', async (req, res) => {
       }
 
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('addAsesmen', 'POST', newAsesmen, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync Write AddAsesmen]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Data asesmen berhasil disimpan.', data: db.asesmen });
     }
 
@@ -1386,18 +1509,27 @@ apiRouter.post('/data', async (req, res) => {
       if (!db.asesmen) db.asesmen = [];
       db.asesmen = db.asesmen.filter(a => a.id !== body.id && a.nis !== body.nis);
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('deleteAsesmen', 'POST', { id: body.id, nis: body.nis }, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync DeleteAsesmen]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Data asesmen berhasil dihapus.', data: db.asesmen });
     }
 
     case 'addKunjungan': {
       if (!db.kunjungan) db.kunjungan = [];
-      const student = db.siswa.find(s => s.nis === body.nis);
+      const student = db.siswa.find(s => String(s.nis).trim() === String(body.nis || '').trim());
       const id = body.id || ('V-' + Date.now());
       const newKunjungan: KunjunganRumahData = {
         id,
-        nis: body.nis,
-        namaSiswa: student ? student.nama : (body.namaSiswa || ''),
-        kelas: student ? student.kelas : (body.kelas || ''),
+        nis: String(body.nis || '').trim(),
+        namaSiswa: body.namaSiswa || (student ? student.nama : ''),
+        kelas: body.kelas || (student ? student.kelas : ''),
         tanggalKunjungan: (body.tanggalKunjungan || new Date().toISOString()).split('T')[0],
         tujuanKunjungan: body.tujuanKunjungan || '',
         hasilTemuan: body.hasilTemuan || '',
@@ -1412,6 +1544,15 @@ apiRouter.post('/data', async (req, res) => {
       }
 
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('addKunjungan', 'POST', newKunjungan, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync Write AddKunjungan]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Data kunjungan rumah berhasil disimpan.', data: db.kunjungan });
     }
 
@@ -1419,18 +1560,27 @@ apiRouter.post('/data', async (req, res) => {
       if (!db.kunjungan) db.kunjungan = [];
       db.kunjungan = db.kunjungan.filter(v => v.id !== body.id);
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('deleteKunjungan', 'POST', { id: body.id }, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync DeleteKunjungan]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Data kunjungan rumah berhasil dihapus.', data: db.kunjungan });
     }
 
     case 'addSnbp': {
       if (!db.snbp) db.snbp = [];
-      const student = db.siswa.find(s => s.nis === body.nis);
+      const student = db.siswa.find(s => String(s.nis).trim() === String(body.nis || '').trim());
       const id = body.id || ('S-' + (body.nis || Date.now()));
       const newSnbp: SnbpData = {
         id,
-        nis: body.nis,
-        namaSiswa: student ? student.nama : (body.namaSiswa || ''),
-        kelas: student ? student.kelas : (body.kelas || ''),
+        nis: String(body.nis || '').trim(),
+        namaSiswa: body.namaSiswa || (student ? student.nama : ''),
+        kelas: body.kelas || (student ? student.kelas : ''),
         namaUniversitas: body.namaUniversitas || '',
         programStudi: body.programStudi || '',
         keteranganLulus: body.keteranganLulus || 'Lulus',
@@ -1446,6 +1596,15 @@ apiRouter.post('/data', async (req, res) => {
       }
 
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('addSnbp', 'POST', newSnbp, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync Write AddSnbp]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Data SNBP/Karir berhasil disimpan.', data: db.snbp });
     }
 
@@ -1453,7 +1612,64 @@ apiRouter.post('/data', async (req, res) => {
       if (!db.snbp) db.snbp = [];
       db.snbp = db.snbp.filter(sn => sn.id !== body.id && sn.nis !== body.nis);
       writeDB(db);
+
+      if (scriptUrl) {
+        try {
+          await proxyToGoogleScript('deleteSnbp', 'POST', { id: body.id, nis: body.nis }, scriptUrl);
+        } catch (err: any) {
+          console.warn('[Sync DeleteSnbp]:', err.message);
+        }
+      }
+
       return res.json({ success: true, message: 'Data SNBP/Karir berhasil dihapus.', data: db.snbp });
+    }
+
+    case 'addActionPlan': {
+      if (!db.actionPlans) db.actionPlans = [];
+      const student = db.siswa.find(s => String(s.nis).trim() === String(body.nis).trim());
+      const newPlan: ActionPlan = {
+        id: body.id || 'AP_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        nis: String(body.nis || '').trim(),
+        namaSiswa: body.namaSiswa || (student ? student.nama : ''),
+        kelas: body.kelas || (student ? student.kelas : ''),
+        judulTarget: body.judulTarget || 'Target Pembinaan Karakter',
+        kategoriTarget: body.kategoriTarget || 'Kedisiplinan',
+        deskripsiRencana: body.deskripsiRencana || '',
+        indikatorKeberhasilan: body.indikatorKeberhasilan || '',
+        tenggatWaktu: body.tenggatWaktu || '',
+        tanggalDibuat: body.tanggalDibuat || new Date().toISOString().split('T')[0],
+        status: body.status || 'Direncanakan',
+        poinTargetPengurangan: Number(body.poinTargetPengurangan) || 0,
+        pembimbing: body.pembimbing || 'Guru BK',
+        catatanEvaluasi: body.catatanEvaluasi || '',
+        tanggalEvaluasiTerakhir: body.tanggalEvaluasiTerakhir || ''
+      };
+
+      db.actionPlans.unshift(newPlan);
+      writeDB(db);
+      return res.json({ success: true, message: 'Rencana tindak lanjut (Action Plan) berhasil ditambahkan.', data: db.actionPlans });
+    }
+
+    case 'updateActionPlan': {
+      if (!db.actionPlans) db.actionPlans = [];
+      const idx = db.actionPlans.findIndex(p => p.id === body.id);
+      if (idx !== -1) {
+        db.actionPlans[idx] = {
+          ...db.actionPlans[idx],
+          ...body,
+          tanggalEvaluasiTerakhir: new Date().toISOString().split('T')[0]
+        };
+        writeDB(db);
+        return res.json({ success: true, message: 'Action Plan berhasil diperbarui.', data: db.actionPlans });
+      }
+      return res.status(404).json({ success: false, message: 'Action Plan tidak ditemukan.' });
+    }
+
+    case 'deleteActionPlan': {
+      if (!db.actionPlans) db.actionPlans = [];
+      db.actionPlans = db.actionPlans.filter(p => p.id !== body.id);
+      writeDB(db);
+      return res.json({ success: true, message: 'Action Plan berhasil dihapus.', data: db.actionPlans });
     }
 
     case 'syncPull': {

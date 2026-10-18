@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Siswa, Pencatatan } from '../types';
 import { Calendar, Search, Download, Printer, ShieldAlert, FileSpreadsheet, FileText, Filter, CalendarCheck, CalendarDays, CalendarRange, Sparkles } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface LaporanSiswaProps {
   pencatatan: Pencatatan[];
@@ -9,47 +10,71 @@ interface LaporanSiswaProps {
 }
 
 export default function LaporanSiswa({ pencatatan, siswa }: LaporanSiswaProps) {
-  // Robust Date Normalizer to convert any format (e.g., DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, ISO timestamps) to YYYY-MM-DD
+  // Robust Date Normalizer to convert any format (e.g., DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, ISO timestamps, "Wed Sep 30...") to YYYY-MM-DD
   const normalizeDate = (dateStr: any): string => {
     if (!dateStr) return '';
-    let str = String(dateStr).trim();
-    
-    // Extract date portion if there is a timestamp (T) or whitespace
-    if (str.includes('T')) {
-      str = str.split('T')[0];
-    } else if (str.includes(' ')) {
-      str = str.split(' ')[0];
+    const raw = String(dateStr).trim();
+    if (!raw) return '';
+
+    // If already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return raw;
     }
-    
+
+    // If starts with YYYY-MM-DD followed by T or space
+    const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    }
+
+    // Try parsing date string (e.g. "Wed Sep 30 2026 00:00:00 GMT+0700", ISO strings)
+    const parsed = new Date(raw);
+    if (!isNaN(parsed.getTime())) {
+      const y = parsed.getFullYear();
+      if (y >= 1990 && y <= 2100) {
+        const m = String(parsed.getMonth() + 1).padStart(2, '0');
+        const d = String(parsed.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+    }
+
     // 1. If it has slashes (e.g., DD/MM/YYYY or YYYY/MM/DD)
-    if (str.includes('/')) {
-      const parts = str.split('/');
+    if (raw.includes('/')) {
+      const parts = raw.split('/');
       if (parts.length === 3) {
         if (parts[0].length === 4) {
-          // YYYY/MM/DD
           return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
         } else {
-          // DD/MM/YYYY -> YYYY-MM-DD
           return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
         }
       }
     }
-    
-    // 2. If it has dashes
-    if (str.includes('-')) {
-      const parts = str.split('-');
+
+    // 2. If it has dashes (e.g. DD-MM-YYYY)
+    if (raw.includes('-')) {
+      const parts = raw.split('-');
       if (parts.length === 3) {
         if (parts[0].length === 4) {
-          // YYYY-MM-DD -> ensure padded format
           return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
         } else {
-          // DD-MM-YYYY -> YYYY-MM-DD
           return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
         }
       }
     }
-    
-    return str.substring(0, 10);
+
+    return raw.substring(0, 10);
+  };
+
+  // Format date to clear Indonesian format DD/MM/YYYY (e.g., 30/09/2026)
+  const formatDisplayDate = (dateStr: any): string => {
+    if (!dateStr) return '-';
+    const norm = normalizeDate(dateStr);
+    if (!norm) return '-';
+    const parts = norm.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return norm;
   };
 
   // Safe Date Helpers to prevent timezone mismatch/shifts
@@ -73,6 +98,7 @@ export default function LaporanSiswa({ pencatatan, siswa }: LaporanSiswaProps) {
   const [selectedYear, setSelectedYear] = useState(currentYearStr);
   const [selectedKelas, setSelectedKelas] = useState('Semua');
   const [searchQuery, setSearchQuery] = useState('');
+  const [pdfOrientation, setPdfOrientation] = useState<'landscape' | 'portrait'>('landscape');
 
   // 1. Calculate Period Stats for Quick Recap Cards (Timezone-Safe)
   const harianRecords = pencatatan.filter(r => normalizeDate(r.tanggal) === todayDateStr);
@@ -187,7 +213,7 @@ export default function LaporanSiswa({ pencatatan, siswa }: LaporanSiswaProps) {
       const headers = ['No', 'Tanggal', 'NIS', 'Nama Siswa', 'Kelas', 'Pelanggaran', 'Poin', 'Petugas Pencatat', 'Kronologi / Keterangan'];
       const rows = records.map((r, idx) => [
         idx + 1,
-        r.tanggal,
+        formatDisplayDate(r.tanggal),
         `'${r.nis}`, // Force text format in Excel
         r.namaSiswa,
         r.kelas,
@@ -220,237 +246,199 @@ export default function LaporanSiswa({ pencatatan, siswa }: LaporanSiswaProps) {
     exportRecordsToExcel(filteredRecords, `${filterType.toUpperCase()}_Kelas_${selectedKelas}`);
   };
 
-  // 4. CETAK / EXPORT TO PDF
+  // 4. CETAK / EXPORT TO PDF (Menggunakan AutoTable agar rapi, tidak tumpang tindih, dan bisa terbaca jelas)
   const triggerPrint = (customRecords?: any, customLabel?: string, customFilterType?: string) => {
     try {
-      const recordsToPrint = Array.isArray(customRecords) ? customRecords : filteredRecords;
+      const recordsToPrint: Pencatatan[] = Array.isArray(customRecords) ? customRecords : filteredRecords;
       const activeFilterType = typeof customFilterType === 'string' ? customFilterType : filterType;
       const activeLabel = typeof customLabel === 'string' ? customLabel : `${filterType.toUpperCase()}_Kelas_${selectedKelas}`;
 
+      const isLandscape = pdfOrientation === 'landscape';
       const doc = new jsPDF({
-        orientation: 'portrait',
+        orientation: isLandscape ? 'landscape' : 'portrait',
         unit: 'mm',
         format: 'a4'
       });
 
-      const startX = 15;
-      let currentY = 15;
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const centerX = pageWidth / 2;
+      const marginX = isLandscape ? 14 : 12;
 
-      // Helper to draw Kop Surat & Title
-      const drawHeader = (pageNumber: number) => {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(13);
-        doc.text('YAYASAN ALDIANA NUSANTARA', 105, currentY, { align: 'center' });
-        currentY += 5;
+      let currentY = 13;
 
-        // Active school name
-        let schoolName = 'SMP NUSANTARA PLUS';
-        if (selectedKelas && selectedKelas !== 'Semua') {
-          schoolName = getSchoolNameFromKelas(selectedKelas);
-        } else if (recordsToPrint.length > 0) {
-          schoolName = getSchoolNameFromKelas(recordsToPrint[0].kelas);
-        }
-        
-        doc.setFontSize(14);
-        doc.text(schoolName, 105, currentY, { align: 'center' });
-        currentY += 5;
+      // Nama Sekolah Berdasarkan Kelas Terpilih
+      let schoolName = 'SMP NUSANTARA PLUS';
+      if (selectedKelas && selectedKelas !== 'Semua') {
+        schoolName = getSchoolNameFromKelas(selectedKelas);
+      } else if (recordsToPrint.length > 0) {
+        schoolName = getSchoolNameFromKelas(recordsToPrint[0].kelas);
+      }
 
-        doc.setFontSize(8);
-        doc.setFont('helvetica', 'normal');
-        doc.text('Jl. Tarmanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan', 105, currentY, { align: 'center' });
-        currentY += 4;
+      // KOP SURAT
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(15, 23, 42); // slate-900
+      doc.text('YAYASAN ALDIANA NUSANTARA', centerX, currentY, { align: 'center' });
+      currentY += 4.5;
 
-        // Line dividers
-        doc.setLineWidth(0.8);
-        doc.line(15, currentY, 195, currentY);
-        doc.setLineWidth(0.2);
-        doc.line(15, currentY + 1, 195, currentY + 1);
-        currentY += 8;
+      doc.setFontSize(14);
+      doc.text(schoolName, centerX, currentY, { align: 'center' });
+      currentY += 4.5;
 
-        // Title
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.text('LAPORAN REKAPITULASI PELANGGARAN TATA TERTIB SISWA', 105, currentY, { align: 'center' });
-        currentY += 5;
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(71, 85, 105); // slate-600
+      doc.text('Jl. Tarmanegara Dalam 1 Ciputat Timur Kota Tangerang Selatan', centerX, currentY, { align: 'center' });
+      currentY += 3.5;
 
-        doc.setFontSize(8.5);
-        doc.setFont('helvetica', 'normal');
-        const periodLabel = activeFilterType === 'semua' ? 'SEMUA PERIODE' :
-                            activeFilterType === 'harian' ? `HARIAN (${formatRawDateID(selectedDate)})` :
-                            activeFilterType === 'mingguan' ? `MINGGUAN (Hingga ${formatRawDateID(selectedDate)})` :
-                            activeFilterType === 'bulanan' ? `BULANAN (${formatMonthID(selectedMonth)})` :
-                            `TAHUNAN (${selectedYear})`;
-        doc.text(`Periode Laporan: ${periodLabel}   |   Saring Kelas: ${selectedKelas}`, 105, currentY, { align: 'center' });
-        currentY += 8;
-      };
+      // Garis Pembatas Kop Surat Ganda (Tebal & Tipis)
+      doc.setDrawColor(15, 23, 42);
+      doc.setLineWidth(0.7);
+      doc.line(marginX, currentY, pageWidth - marginX, currentY);
+      doc.setLineWidth(0.2);
+      doc.line(marginX, currentY + 0.8, pageWidth - marginX, currentY + 0.8);
+      currentY += 7;
 
-      drawHeader(1);
+      // Judul Laporan
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(15, 23, 42);
+      doc.text('LAPORAN REKAPITULASI PELANGGARAN TATA TERTIB SISWA', centerX, currentY, { align: 'center' });
+      currentY += 4.5;
 
-      // Table Header Row
-      const colWidths = [8, 18, 14, 26, 12, 45, 10, 22, 25];
-      const colX = [
-        startX, // 15
-        startX + 8, // 23
-        startX + 8 + 18, // 41
-        startX + 8 + 18 + 14, // 55
-        startX + 8 + 18 + 14 + 26, // 81
-        startX + 8 + 18 + 14 + 26 + 12, // 93
-        startX + 8 + 18 + 14 + 26 + 12 + 45, // 138
-        startX + 8 + 18 + 14 + 26 + 12 + 45 + 10, // 148
-        startX + 8 + 18 + 14 + 26 + 12 + 45 + 10 + 22, // 170
-      ];
-      const headers = ['No', 'Tanggal', 'NIS', 'Nama Siswa', 'Kelas', 'Kasus Pelanggaran', 'Poin', 'Petugas', 'Keterangan'];
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(71, 85, 105);
+      const periodLabel = activeFilterType === 'semua' ? 'SEMUA PERIODE' :
+                          activeFilterType === 'harian' ? `HARIAN (${formatRawDateID(selectedDate)})` :
+                          activeFilterType === 'mingguan' ? `MINGGUAN (Hingga ${formatRawDateID(selectedDate)})` :
+                          activeFilterType === 'bulanan' ? `BULANAN (${formatMonthID(selectedMonth)})` :
+                          `TAHUNAN (${selectedYear})`;
+      doc.text(`Periode Laporan: ${periodLabel}   |   Saring Kelas: ${selectedKelas}`, centerX, currentY, { align: 'center' });
+      currentY += 6;
 
-      const drawTableHeader = (y: number) => {
-        doc.setFillColor(241, 245, 249); // slate-100 bg
-        doc.rect(startX, y, 180, 8, 'F');
-        doc.setDrawColor(71, 85, 105); // slate-600
-        doc.rect(startX, y, 180, 8, 'S');
+      // Konversi Data ke Format Baris Tabel
+      const tableRows = recordsToPrint.map((r, idx) => [
+        String(idx + 1),
+        formatDisplayDate(r.tanggal),
+        String(r.nis || '-'),
+        r.namaSiswa || '-',
+        r.kelas || '-',
+        r.pelanggaran || '-',
+        `+${r.poin || 0}`,
+        r.petugas || '-',
+        r.keterangan && r.keterangan.trim() !== '' ? r.keterangan : '-'
+      ]);
 
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
-        doc.setTextColor(30, 41, 59); // slate-800
+      if (tableRows.length === 0) {
+        tableRows.push(['-', '-', '-', 'Tidak ada data pelanggaran pada filter/periode ini.', '-', '-', '-', '-', '-']);
+      }
 
-        headers.forEach((h, i) => {
-          let align = 'left';
-          let xOffset = 1.5;
-          if (i === 0 || i === 4 || i === 6) {
-            align = 'center';
-            xOffset = colWidths[i] / 2;
+      // Render AutoTable dengan pembagian kolom proporsional & text wrapping otomatis
+      autoTable(doc, {
+        startY: currentY,
+        margin: { left: marginX, right: marginX, bottom: 18 },
+        head: [['No', 'Tanggal', 'NIS', 'Nama Siswa', 'Kelas', 'Kasus Pelanggaran', 'Poin', 'Petugas', 'Keterangan']],
+        body: tableRows,
+        theme: 'grid',
+        showHead: 'everyPage',
+        styles: {
+          font: 'helvetica',
+          fontSize: isLandscape ? 8 : 7,
+          cellPadding: { top: 2.2, right: 2, bottom: 2.2, left: 2 },
+          overflow: 'linebreak',
+          valign: 'middle',
+          textColor: [30, 41, 59], // slate-800
+          lineColor: [203, 213, 225], // slate-300
+          lineWidth: 0.15,
+        },
+        headStyles: {
+          fillColor: [241, 245, 249], // slate-100
+          textColor: [30, 41, 59], // slate-800
+          fontStyle: 'bold',
+          lineColor: [100, 116, 139], // slate-500
+          lineWidth: 0.2,
+          halign: 'center',
+        },
+        columnStyles: isLandscape ? {
+          0: { cellWidth: 10, halign: 'center' }, // No
+          1: { cellWidth: 22, halign: 'center' }, // Tanggal (DD/MM/YYYY)
+          2: { cellWidth: 20, halign: 'center' }, // NIS
+          3: { cellWidth: 44, halign: 'left' },   // Nama Siswa
+          4: { cellWidth: 28, halign: 'center' }, // Kelas
+          5: { cellWidth: 'auto', halign: 'left' }, // Kasus Pelanggaran
+          6: { cellWidth: 14, halign: 'center', fontStyle: 'bold', textColor: [220, 38, 38] }, // Poin
+          7: { cellWidth: 32, halign: 'left' },   // Petugas
+          8: { cellWidth: 38, halign: 'left' },   // Keterangan
+        } : {
+          0: { cellWidth: 8, halign: 'center' },
+          1: { cellWidth: 18, halign: 'center' },
+          2: { cellWidth: 18, halign: 'center' },
+          3: { cellWidth: 32, halign: 'left' },
+          4: { cellWidth: 20, halign: 'center' },
+          5: { cellWidth: 'auto', halign: 'left' },
+          6: { cellWidth: 12, halign: 'center', fontStyle: 'bold', textColor: [220, 38, 38] },
+          7: { cellWidth: 24, halign: 'left' },
+          8: { cellWidth: 26, halign: 'left' },
+        },
+        didParseCell: (data) => {
+          // Warna khusus untuk kolom poin pelanggaran (+X)
+          if (data.section === 'body' && data.column.index === 6) {
+            data.cell.styles.textColor = [220, 38, 38];
+            data.cell.styles.fontStyle = 'bold';
           }
-          doc.text(h, colX[i] + xOffset, y + 5.5, { align: align as any });
-        });
-
-        // Draw individual vertical lines for headers
-        let tempX = startX;
-        for (let i = 1; i < colWidths.length; i++) {
-          tempX += colWidths[i - 1];
-          doc.line(tempX, y, tempX, y + 8);
-        }
-      };
-
-      drawTableHeader(currentY);
-      currentY += 8;
-
-      // Draw rows
-      if (recordsToPrint.length === 0) {
-        doc.setFont('helvetica', 'italic');
-        doc.setFontSize(9);
-        doc.text('Tidak ada data kasus pelanggaran pada filter terpilih.', 105, currentY + 8, { align: 'center' });
-        currentY += 15;
-      } else {
-        recordsToPrint.forEach((r, idx) => {
-          // Prepare multi-line text wrapping for wrapping columns
-          const splitNama = doc.splitTextToSize(r.namaSiswa, colWidths[3] - 2);
-          const splitPelanggaran = doc.splitTextToSize(r.pelanggaran, colWidths[5] - 2);
-          const splitPetugas = doc.splitTextToSize(r.petugas, colWidths[7] - 2);
-          const splitKeterangan = doc.splitTextToSize(r.keterangan || '-', colWidths[8] - 2);
-
-          const maxLines = Math.max(
-            splitNama.length,
-            splitPelanggaran.length,
-            splitPetugas.length,
-            splitKeterangan.length,
-            1
-          );
-
-          const rowHeight = Math.max(maxLines * 4.5, 7);
-
-          // Check for page overflow
-          if (currentY + rowHeight > 240) {
-            doc.addPage();
-            currentY = 15;
-            drawHeader(doc.getNumberOfPages());
-            drawTableHeader(currentY);
-            currentY += 8;
-          }
-
-          // Draw borders for this row cell by cell or outer rect
-          doc.setDrawColor(203, 213, 225); // slate-300 light border
-          doc.rect(startX, currentY, 180, rowHeight, 'S');
-
-          // Draw vertical divider lines inside row
-          let tempX = startX;
-          for (let i = 1; i < colWidths.length; i++) {
-            tempX += colWidths[i - 1];
-            doc.line(tempX, currentY, tempX, currentY + rowHeight);
-          }
-
+        },
+        didDrawPage: (data) => {
+          // Catatan Kaki / Halaman di Bawah Dokumen
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(7.5);
-          doc.setTextColor(15, 23, 42); // slate-900
+          doc.setTextColor(148, 163, 184); // slate-400
+          doc.text(
+            'Sistem Integrasi Kesiswaan & BK | Laporan Rekapitulasi Tata Tertib',
+            marginX,
+            pageHeight - 7
+          );
+          doc.text(
+            `Halaman ${data.pageNumber} dari {total_pages_count_string}`,
+            pageWidth - marginX,
+            pageHeight - 7,
+            { align: 'right' }
+          );
+        }
+      });
 
-          // No
-          doc.text(String(idx + 1), colX[0] + colWidths[0]/2, currentY + 4.5, { align: 'center' });
-          // Tanggal
-          doc.text(r.tanggal, colX[1] + 1.5, currentY + 4.5);
-          // NIS
-          doc.text(String(r.nis), colX[2] + 1.5, currentY + 4.5);
-          
-          // Nama Siswa (wrapped)
-          splitNama.forEach((line: string, lineIdx: number) => {
-            doc.text(line, colX[3] + 1.5, currentY + 4.5 + (lineIdx * 4.5));
-          });
-
-          // Kelas
-          doc.text(r.kelas, colX[4] + colWidths[4]/2, currentY + 4.5, { align: 'center' });
-
-          // Pelanggaran (wrapped)
-          splitPelanggaran.forEach((line: string, lineIdx: number) => {
-            doc.text(line, colX[5] + 1.5, currentY + 4.5 + (lineIdx * 4.5));
-          });
-
-          // Poin
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(239, 68, 68); // red-500
-          doc.text(`+${r.poin}`, colX[6] + colWidths[6]/2, currentY + 4.5, { align: 'center' });
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(15, 23, 42); // slate-900
-
-          // Petugas (wrapped)
-          splitPetugas.forEach((line: string, lineIdx: number) => {
-            doc.text(line, colX[7] + 1.5, currentY + 4.5 + (lineIdx * 4.5));
-          });
-
-          // Keterangan (wrapped)
-          splitKeterangan.forEach((line: string, lineIdx: number) => {
-            doc.text(line, colX[8] + 1.5, currentY + 4.5 + (lineIdx * 4.5));
-          });
-
-          currentY += rowHeight;
-        });
-      }
-
-      // Check if signature section fits on current page, else add new page
-      if (currentY + 40 > 280) {
+      // Tanda Tangan Pengesahan (Kepala Sekolah & Guru BK)
+      let afterTableY = ((doc as any).lastAutoTable?.finalY || currentY) + 8;
+      if (afterTableY + 36 > pageHeight - 15) {
         doc.addPage();
-        currentY = 20;
-      } else {
-        currentY += 12;
+        afterTableY = 20;
       }
 
-      // Draw horizontal signature layouts
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
+      doc.setFontSize(8.5);
       doc.setTextColor(15, 23, 42);
 
-      // Left Column: Kepala Sekolah
-      doc.setFontSize(9);
-      doc.setTextColor(15, 23, 42);
-      doc.text('Mengetahui,', startX + 5, currentY);
-      doc.text('Kepala Sekolah', startX + 5, currentY + 5.5);
+      const sigLeftX = marginX + 8;
+      const sigRightX = pageWidth - marginX - 58;
 
-      doc.line(startX + 5, currentY + 23, startX + 55, currentY + 23);
+      // Kolom Kiri: Kepala Sekolah
+      doc.text('Mengetahui,', sigLeftX, afterTableY);
+      doc.text('Kepala Sekolah', sigLeftX, afterTableY + 4.5);
+      doc.line(sigLeftX, afterTableY + 22, sigLeftX + 48, afterTableY + 22);
 
-      // Right Column: Guru BK
-      doc.setFontSize(9);
-      doc.setTextColor(15, 23, 42);
-      doc.text(`Tangerang Selatan, ${new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}`, startX + 115, currentY);
-      doc.text('Guru BK', startX + 115, currentY + 5.5);
-      
-      doc.line(startX + 115, currentY + 23, startX + 165, currentY + 23);
+      // Kolom Kanan: Guru BK
+      const todayFormatted = new Date().toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
+      doc.text(`Tangerang Selatan, ${todayFormatted}`, sigRightX, afterTableY);
+      doc.text('Guru BK / Koordinator Tatib', sigRightX, afterTableY + 4.5);
+      doc.line(sigRightX, afterTableY + 22, sigRightX + 48, afterTableY + 22);
 
-      // Save PDF document
+      // Update total jumlah halaman di seluruh dokumen
+      if (typeof (doc as any).putTotalPages === 'function') {
+        (doc as any).putTotalPages('{total_pages_count_string}');
+      }
+
+      // Simpan file PDF
       const docName = `Laporan_Rekap_${activeLabel}_${new Date().toISOString().split('T')[0]}.pdf`;
       doc.save(docName);
 
@@ -716,20 +704,43 @@ export default function LaporanSiswa({ pencatatan, siswa }: LaporanSiswaProps) {
             <p className="text-xs text-slate-500 font-sans">Sesuaikan filter tanggal kustom dan kelas di bawah untuk pencarian spesifik</p>
           </div>
           
-          <div className="flex gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+              <span className="text-[10px] font-bold text-slate-500 uppercase px-1.5 hidden sm:inline">Format PDF:</span>
+              <button
+                type="button"
+                onClick={() => setPdfOrientation('landscape')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  pdfOrientation === 'landscape' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Lanskap (Lebar - Sangat direkomendasikan untuk 9 kolom agar leluasa, rapi, dan tidak berdempetan)"
+              >
+                Lanskap (Rekomendasi)
+              </button>
+              <button
+                type="button"
+                onClick={() => setPdfOrientation('portrait')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  pdfOrientation === 'portrait' ? 'bg-white text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Potret (Tegak)"
+              >
+                Potret
+              </button>
+            </div>
             <button
               id="btn-export-excel"
               onClick={exportToExcel}
               className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-100 font-semibold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
             >
-              <FileSpreadsheet className="w-4 h-4" /> Ekspor Excel Terpilih
+              <FileSpreadsheet className="w-4 h-4" /> Ekspor Excel
             </button>
             <button
               id="btn-print-pdf"
-              onClick={triggerPrint}
+              onClick={() => triggerPrint()}
               className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
             >
-              <Printer className="w-4 h-4" /> Cetak PDF Terpilih
+              <Printer className="w-4 h-4" /> Cetak PDF ({pdfOrientation === 'landscape' ? 'Lanskap' : 'Potret'})
             </button>
           </div>
         </div>

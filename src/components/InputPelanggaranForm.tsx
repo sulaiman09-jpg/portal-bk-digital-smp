@@ -9,7 +9,11 @@ interface InputPelanggaranFormProps {
   currentUser: User;
   onAddRecord: (record: {
     nis: string;
+    namaSiswa?: string;
+    kelas?: string;
     pelanggaran: string;
+    kode?: string;
+    poin?: number;
     tanggal: string;
     petugas: string;
     keterangan: string;
@@ -185,7 +189,11 @@ export default function InputPelanggaranForm({
 
     const success = await onAddRecord({
       nis: selectedNis,
+      namaSiswa: selectedStudentObj?.nama || '',
+      kelas: selectedStudentObj?.kelas || '',
       pelanggaran: selectedViolationName,
+      kode: selectedViolationObj?.kode || '',
+      poin: selectedViolationObj?.poin || 0,
       tanggal,
       petugas,
       keterangan,

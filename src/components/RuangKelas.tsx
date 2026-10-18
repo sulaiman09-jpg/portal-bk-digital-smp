@@ -38,12 +38,15 @@ interface RuangKelasProps {
   onDeleteStudent: (id: string) => Promise<boolean>;
   onAddRecord: (record: {
     nis: string;
+    namaSiswa?: string;
+    kelas?: string;
     pelanggaran: string;
+    kode?: string;
+    poin?: number;
     tanggal: string;
     petugas: string;
     keterangan: string;
     foto?: string;
-    poin?: number;
   }) => Promise<boolean>;
   classNameFilter: string;
 }
@@ -63,9 +66,13 @@ export default function RuangKelas({
   const classStudents = siswa.filter(s => s.kelas === classNameFilter || belongsToSchool(s.kelas, classNameFilter));
 
   // Filter records to only those for students in this class
-  const studentNisList = classStudents.map(s => s.nis);
+  const studentNisList = classStudents.map(s => String(s.nis || '').trim());
   const classRecords = pencatatan
-    .filter(r => studentNisList.includes(r.nis))
+    .filter(r => {
+      const rNis = String(r.nis || '').trim();
+      const rKelas = String(r.kelas || '').trim();
+      return studentNisList.includes(rNis) || rKelas === classNameFilter || belongsToSchool(rKelas, classNameFilter);
+    })
     .sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
 
   // ------------------ 1. INPUT DATA SISWA STATES & LOGIC ------------------
@@ -409,7 +416,11 @@ export default function RuangKelas({
     setIsSubmittingRecord(true);
     const success = await onAddRecord({
       nis: selectedNis,
+      namaSiswa: selectedStudentObj?.nama || '',
+      kelas: selectedStudentObj?.kelas || classNameFilter,
       pelanggaran: selectedViolationName,
+      kode: selectedViolationObj?.kode || '',
+      poin: selectedViolationObj?.poin || 0,
       tanggal,
       petugas,
       keterangan,
@@ -459,7 +470,10 @@ export default function RuangKelas({
     setIsSubmittingRemisi(true);
     const success = await onAddRecord({
       nis: remisiNis,
+      namaSiswa: selectedRemisiStudentObj?.nama || '',
+      kelas: selectedRemisiStudentObj?.kelas || classNameFilter,
       pelanggaran: `Remisi Poin: ${remisiKeterangan}`,
+      kode: 'RMS',
       tanggal: remisiTanggal,
       petugas: remisiPetugas,
       keterangan: `Pemberian remisi pengurangan poin sebesar -${remisiPoin} poin. Alasan: ${remisiKeterangan}`,
@@ -484,6 +498,22 @@ export default function RuangKelas({
 
   // ------------------ 3. PDF GENERATION EXPORTER ------------------
   const handleDownloadPDF = (student: Siswa, isIndividual: boolean, specificRecord?: Pencatatan) => {
+    const formatDisplayDate = (dStr: any) => {
+      if (!dStr) return '-';
+      const s = String(dStr).trim();
+      if (!s) return '-';
+      const parsed = new Date(s);
+      if (!isNaN(parsed.getTime())) {
+        const y = parsed.getFullYear();
+        if (y >= 1990 && y <= 2100) {
+          const d = String(parsed.getDate()).padStart(2, '0');
+          const m = String(parsed.getMonth() + 1).padStart(2, '0');
+          return `${d}/${m}/${y}`;
+        }
+      }
+      return s.length > 10 ? s.substring(0, 10) : s;
+    };
+
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -577,7 +607,7 @@ export default function RuangKelas({
       currentY += 5;
 
       const incidentDetails = [
-        { label: 'Tanggal Kejadian', val: specificRecord.tanggal },
+        { label: 'Tanggal Kejadian', val: formatDisplayDate(specificRecord.tanggal) },
         { label: 'Deskripsi Pelanggaran', val: specificRecord.pelanggaran },
         { label: 'Bobot Poin Sanksi', val: `+${specificRecord.poin} Poin` },
         { label: 'Petugas / Guru BK', val: specificRecord.petugas },
@@ -634,7 +664,7 @@ export default function RuangKelas({
         const isTruncated = studentAllRecords.length > maxDisplayRecords;
 
         displayRecords.forEach(rec => {
-          doc.text(rec.tanggal, startX + 2, currentY + 4);
+          doc.text(formatDisplayDate(rec.tanggal), startX + 2, currentY + 4);
           
           const textLines = doc.splitTextToSize(rec.pelanggaran, 85);
           doc.text(textLines, startX + 25, currentY + 4);

@@ -1,4 +1,4 @@
-import { Siswa, Pelanggaran, Pencatatan, Pembinaan, KehadiranData, KonselingData, AsesmenData, KunjunganRumahData, SnbpData, AuthResponse, ApiResponse } from '../types';
+import { Siswa, Pelanggaran, Pencatatan, Pembinaan, KehadiranData, KonselingData, AsesmenData, KunjunganRumahData, SnbpData, ActionPlan, AuthResponse, ApiResponse } from '../types';
 
 // Helper to get active auth token and Google Script URL for stateless serverless environments like Vercel
 function getAuthHeaders(): Record<string, string> {
@@ -198,7 +198,7 @@ export const googleSheetApi = {
     }
   },
 
-  async addRecord(data: { nis: string; pelanggaran: string; tanggal?: string; petugas: string; keterangan?: string; foto?: string; id?: string; poin?: number }): Promise<ApiResponse<{ pencatatan: Pencatatan[]; pembinaan: Pembinaan[] }>> {
+  async addRecord(data: { nis: string; namaSiswa?: string; kelas?: string; pelanggaran: string; kode?: string; tanggal?: string; petugas: string; keterangan?: string; foto?: string; id?: string; poin?: number }): Promise<ApiResponse<{ pencatatan: Pencatatan[]; pembinaan: Pembinaan[] }>> {
     try {
       const response = await fetch('/api/data?action=addRecord', {
         method: 'POST',
@@ -428,7 +428,109 @@ export const googleSheetApi = {
     }
   },
 
-  // 8. Data Synchronization APIs
+  // 8. Action Plan & Target Pembinaan APIs
+  async getActionPlans(): Promise<ApiResponse<ActionPlan[]>> {
+    try {
+      const response = await fetch('/api/data?action=getActionPlans', {
+        headers: getAuthHeaders()
+      });
+      const res = await response.json();
+      if (res.success && Array.isArray(res.data)) {
+        localStorage.setItem('local_action_plans', JSON.stringify(res.data));
+        return res;
+      }
+    } catch (error) {
+      console.warn('Fetch action plans error, reading from local fallback:', error);
+    }
+    const local = localStorage.getItem('local_action_plans');
+    const plans: ActionPlan[] = local ? JSON.parse(local) : [];
+    return { success: true, data: plans };
+  },
+
+  async addActionPlan(data: Partial<ActionPlan>): Promise<ApiResponse<ActionPlan[]>> {
+    try {
+      const response = await fetch('/api/data?action=addActionPlan', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(data)
+      });
+      const res = await response.json();
+      if (res.success && Array.isArray(res.data)) {
+        localStorage.setItem('local_action_plans', JSON.stringify(res.data));
+        return res;
+      }
+    } catch (error) {
+      console.warn('Add action plan server error, falling back locally:', error);
+    }
+    // Local fallback update
+    const local = localStorage.getItem('local_action_plans');
+    const plans: ActionPlan[] = local ? JSON.parse(local) : [];
+    const newPlan: ActionPlan = {
+      id: data.id || 'AP_' + Date.now(),
+      nis: data.nis || '',
+      namaSiswa: data.namaSiswa || '',
+      kelas: data.kelas || '',
+      judulTarget: data.judulTarget || 'Target Pembinaan',
+      kategoriTarget: data.kategoriTarget || 'Kedisiplinan',
+      deskripsiRencana: data.deskripsiRencana || '',
+      indikatorKeberhasilan: data.indikatorKeberhasilan || '',
+      tenggatWaktu: data.tenggatWaktu || '',
+      tanggalDibuat: data.tanggalDibuat || new Date().toISOString().split('T')[0],
+      status: data.status || 'Direncanakan',
+      poinTargetPengurangan: data.poinTargetPengurangan || 0,
+      pembimbing: data.pembimbing || 'Guru BK',
+      catatanEvaluasi: data.catatanEvaluasi || ''
+    };
+    const updated = [newPlan, ...plans];
+    localStorage.setItem('local_action_plans', JSON.stringify(updated));
+    return { success: true, message: 'Action plan berhasil disimpan (Offline/Lokal).', data: updated };
+  },
+
+  async updateActionPlan(id: string, updates: Partial<ActionPlan>): Promise<ApiResponse<ActionPlan[]>> {
+    try {
+      const response = await fetch('/api/data?action=updateActionPlan', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ id, ...updates })
+      });
+      const res = await response.json();
+      if (res.success && Array.isArray(res.data)) {
+        localStorage.setItem('local_action_plans', JSON.stringify(res.data));
+        return res;
+      }
+    } catch (error) {
+      console.warn('Update action plan server error, falling back locally:', error);
+    }
+    const local = localStorage.getItem('local_action_plans');
+    const plans: ActionPlan[] = local ? JSON.parse(local) : [];
+    const updated = plans.map(p => p.id === id ? { ...p, ...updates, tanggalEvaluasiTerakhir: new Date().toISOString().split('T')[0] } : p);
+    localStorage.setItem('local_action_plans', JSON.stringify(updated));
+    return { success: true, message: 'Action plan berhasil diperbarui.', data: updated };
+  },
+
+  async deleteActionPlan(id: string): Promise<ApiResponse<ActionPlan[]>> {
+    try {
+      const response = await fetch('/api/data?action=deleteActionPlan', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ id })
+      });
+      const res = await response.json();
+      if (res.success && Array.isArray(res.data)) {
+        localStorage.setItem('local_action_plans', JSON.stringify(res.data));
+        return res;
+      }
+    } catch (error) {
+      console.warn('Delete action plan server error, falling back locally:', error);
+    }
+    const local = localStorage.getItem('local_action_plans');
+    const plans: ActionPlan[] = local ? JSON.parse(local) : [];
+    const updated = plans.filter(p => p.id !== id);
+    localStorage.setItem('local_action_plans', JSON.stringify(updated));
+    return { success: true, message: 'Action plan berhasil dihapus.', data: updated };
+  },
+
+  // 9. Data Synchronization APIs
   async syncPull(): Promise<ApiResponse<any>> {
     try {
       const response = await fetch('/api/data?action=syncPull', {

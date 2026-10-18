@@ -292,15 +292,18 @@ export default function App() {
   // 3. Log Records mutations (addRecord / deleteRecord)
   const handleAddRecord = async (recordData: {
     nis: string;
+    namaSiswa?: string;
+    kelas?: string;
     pelanggaran: string;
+    kode?: string;
+    poin?: number;
     tanggal: string;
     petugas: string;
     keterangan: string;
     foto?: string;
-    poin?: number;
   }): Promise<boolean> => {
     const res = await googleSheetApi.addRecord(recordData);
-    if (res.success && res.data) {
+    if (res.success) {
       // Refresh all datasets because points recalculation takes place
       await loadAllData();
       showToast('Pencatatan pelanggaran baru berhasil direkam.', 'success');
@@ -402,6 +405,7 @@ export default function App() {
             pencatatan={filteredPencatatan}
             pembinaan={filteredPembinaan}
             userRole={userRole}
+            currentUser={currentUser ? { nama: currentUser.nama, role: currentUser.role } : undefined}
             onDeleteRecord={handleDeleteRecord}
             selectedNisFromOutside={selectedNisFromOutside}
           />

@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Siswa, Pelanggaran, Pencatatan, Pembinaan } from '../types';
 import StatCard from './StatCard';
 import GenderDemographicsCard from './GenderDemographicsCard';
+import ViolationTrendChart from './ViolationTrendChart';
 import { AlertTriangle, BookOpen, Clock, Calendar, ShieldCheck, ChevronRight } from 'lucide-react';
 
 interface DashboardOverviewProps {
@@ -90,28 +91,8 @@ export default function DashboardOverview({
   const pelanggaranBulanIni = pencatatan.filter(r => normalizeDate(r.tanggal).startsWith(currentMonthPrefix)).length;
   const totalPoinKeseluruhan = pencatatan.reduce((sum, r) => sum + r.poin, 0);
 
-  // 2. Monthly violation bar chart calculations
+  // 2. Month labels
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-  const monthlyCounts = Array(12).fill(0);
-  
-  pencatatan.forEach(record => {
-    try {
-      const normalized = normalizeDate(record.tanggal);
-      if (normalized) {
-        const parts = normalized.split('-');
-        if (parts.length === 3) {
-          const monthIndex = Number(parts[1]) - 1; // 0-11
-          if (monthIndex >= 0 && monthIndex < 12) {
-            monthlyCounts[monthIndex]++;
-          }
-        }
-      }
-    } catch (e) {
-      // Ignore date parsing issues
-    }
-  });
-
-  const maxMonthlyCount = Math.max(...monthlyCounts, 1);
 
   // 3. Category distribution
   const categoryCounts = { Ringan: 0, Sedang: 0, Berat: 0 };
@@ -224,41 +205,12 @@ export default function DashboardOverview({
 
       {/* Main Charts & Indicators */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Monthly Chart Bar */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Grafik Pelanggaran Bulanan</h2>
-              <p className="text-xs text-slate-500">Jumlah kasus pelanggaran per bulan tahun ini</p>
-            </div>
-            <span className="text-xs font-semibold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full">Tahun {new Date().getFullYear()}</span>
-          </div>
-
-          {/* Bar Chart Container */}
-          <div className="h-64 flex items-end gap-2 md:gap-4 pt-4 px-2">
-            {months.map((month, idx) => {
-              const count = monthlyCounts[idx];
-              const heightPercent = (count / maxMonthlyCount) * 85; // capped at 85% for styling clearance
-              
-              return (
-                <div key={month} className="flex-1 flex flex-col items-center group h-full justify-end">
-                  {/* Tooltip on Hover */}
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white text-[10px] rounded-md py-1 px-1.5 mb-1 text-center font-mono select-none pointer-events-none shadow-md">
-                    {count} kasus
-                  </div>
-                  {/* Animated Bar */}
-                  <motion.div
-                    initial={{ height: 0 }}
-                    animate={{ height: `${heightPercent}%` }}
-                    transition={{ duration: 0.5, delay: idx * 0.03 }}
-                    className={`w-full rounded-t-md transition-colors ${count > 0 ? 'bg-blue-600 group-hover:bg-blue-500' : 'bg-slate-100'}`}
-                  />
-                  <span className="text-[10px] font-semibold text-slate-500 mt-2">{month}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {/* Monthly Violation Trend Recharts Component */}
+        <ViolationTrendChart
+          pencatatan={pencatatan}
+          pelanggaran={pelanggaran}
+          className="lg:col-span-2"
+        />
 
         {/* Category breakdown & statistics */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
